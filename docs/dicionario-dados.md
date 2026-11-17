@@ -127,26 +127,26 @@ Exemplo válido de `probabilidades_posicoes`:
 
 ```json
 {
-  "1": 2.50,
-  "2": 4.10,
-  "3": 7.25,
-  "4": 8.00,
-  "5": 9.15,
-  "6": 8.50,
-  "7": 7.00,
-  "8": 6.00,
+  "1": 5.00,
+  "2": 5.00,
+  "3": 5.00,
+  "4": 5.00,
+  "5": 5.00,
+  "6": 5.00,
+  "7": 5.00,
+  "8": 5.00,
   "9": 5.00,
   "10": 5.00,
-  "11": 4.50,
-  "12": 4.00,
-  "13": 3.50,
-  "14": 3.00,
-  "15": 3.00,
-  "16": 2.50,
-  "17": 2.00,
-  "18": 2.00,
-  "19": 1.50,
-  "20": 1.50
+  "11": 5.00,
+  "12": 5.00,
+  "13": 5.00,
+  "14": 5.00,
+  "15": 5.00,
+  "16": 5.00,
+  "17": 5.00,
+  "18": 5.00,
+  "19": 5.00,
+  "20": 5.00
 }
 ```
 
@@ -283,7 +283,7 @@ Use interfaces quando existir mais de uma implementação real (ex.: `DataProvid
 - PR #35: mapeamento e decisões da API.
 - PR #36: `DataProviderInterface`, `ApiDataProvider`, `FixtureDataProvider`, `ApiRequestException` e testes iniciais.
 - PR #38: schema/seed inicial e separação de fixtures.
-- PR #39: revisão do seed e fluxo de inicialização (verificar estado antes de assumir que foi integrado).
+- PR #39: revisão do seed e fluxo de inicialização. Em 17/11/2026, PR #39 está aberto e ainda não foi integrado; a branch main consultada ainda contém INSERTs iniciais de competição/temporada/clubes em `database/seed.sql`. Não assumir que a remoção já está em produção até o merge.
 - Issues #1, #3, #4, #7, #8, #11, #12, #13, #18, #19, #20, #40 e #41: banco, persistência, classificação, sincronização, probabilidades e logs.
 
 ## 7. Testes mínimos de contrato
