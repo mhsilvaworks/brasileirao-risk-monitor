@@ -1,54 +1,126 @@
 -- ============================================================================
--- FIXTURES CONTROLADAS DE TESTE (NÃO EXECUTAR EM AMBIENTE DE PRODUÇÃO)
--- Finalidade: Validar StandingsService e motor de simulação em cenários
--- determinísticos (classificação, desempate, jogo adiado, placar NULL e STJD).
--- Todos os external_id de partidas de fixture usam faixa >= 900000.
+-- FIXTURES DETERMINÍSTICAS (SOMENTE EM BANCO DE TESTES)
+--
+-- Pré-requisito: o banco deve ter sido populado por uma sincronização da API
+-- football-data.org. Este arquivo cria somente partidas artificiais de teste.
+-- Não cadastra clubes/temporadas fictícios e não altera ajustes administrativos.
+--
+-- IDs 2000000001..2000000005 são reservados para estas partidas de fixture.
 -- ============================================================================
 
 USE brasileirao_risco;
 
--- Limpa apenas partidas de fixture anteriores (faixa >= 900000) para idempotencia
-DELETE FROM partidas WHERE external_id >= 900000;
+START TRANSACTION;
 
--- Reseta eventuais punicoes de teste na temporada 2026
-UPDATE clubes_temporadas ct
-JOIN temporadas t ON t.id = ct.temporada_id
-SET ct.ajuste_pontos = 0, ct.motivo_ajuste = NULL
-WHERE t.external_id = 2474;
+-- Remove somente os cinco IDs reservados a este cenário. Não apaga partidas
+-- reais e não altera dados administrativos dos clubes.
+DELETE FROM partidas
+WHERE external_id BETWEEN 2000000001 AND 2000000005;
 
--- CENÁRIO 1: Punição administrativa (-4 pontos no STJD para external_id 1770 - Botafogo)
-UPDATE clubes_temporadas ct
-JOIN temporadas t ON t.id = ct.temporada_id
-JOIN clubes c ON c.id = ct.clube_id
-SET ct.ajuste_pontos = -4,
-    ct.motivo_ajuste = '[FIXTURE TESTE] Punição administrativa STJD (-4 pts)'
-WHERE t.external_id = 2474 AND c.external_id = 1770;
+-- Identifica a temporada mais recente do Brasileirão já sincronizada e usa
+-- os IDs externos oficiais dos clubes para resolver as chaves internas.
+-- Se algum clube não fizer parte da temporada, a respectiva fixture não será
+-- criada; por isso, execute após sincronizar clubes e temporada pela API.
 
--- CENÁRIO 2: Partidas determinísticas para validar pontos, vitórias, saldo, gols pró,
--- partida adiada (POSTPONED) e partida agendada com placar NULL (SCHEDULED).
-INSERT INTO partidas (external_id, temporada_id, rodada, data_hora_utc, status, mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor)
-SELECT 900001, t.id, 1, '2026-02-01 19:00:00', 'FINISHED', m.id, v.id, 3, 0, 'HOME_TEAM'
-FROM temporadas t, clubes m, clubes v
-WHERE t.external_id = 2474 AND m.external_id = 1783 AND v.external_id = 1771; -- FLA 3x0 CRU (FLA: 3 pts, 1V, SG +3, GP 3)
+-- CENÁRIO 1: vitória do Flamengo sobre o Cruzeiro.
+INSERT INTO partidas (
+    external_id, temporada_id, rodada, data_hora_utc, status,
+    mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor
+)
+SELECT
+    2000000001, t.id, 1, '2026-02-01 19:00:00', 'FINISHED',
+    mandante.id, visitante.id, 3, 0, 'HOME_TEAM'
+FROM competicoes c
+JOIN temporadas t ON t.competicao_id = c.id
+JOIN clubes mandante ON mandante.external_id = 1783
+JOIN clubes visitante ON visitante.external_id = 1771
+WHERE c.codigo = 'BSA'
+  AND t.ano = (
+      SELECT MAX(t2.ano)
+      FROM temporadas t2
+      WHERE t2.competicao_id = c.id
+  );
 
-INSERT INTO partidas (external_id, temporada_id, rodada, data_hora_utc, status, mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor)
-SELECT 900002, t.id, 1, '2026-02-01 21:30:00', 'FINISHED', m.id, v.id, 2, 0, 'HOME_TEAM'
-FROM temporadas t, clubes m, clubes v
-WHERE t.external_id = 2474 AND m.external_id = 1769 AND v.external_id = 1765; -- PAL 2x0 FLU (PAL: 3 pts, 1V, SG +2, GP 2 -> perde desempate SG para FLA)
+-- CENÁRIO 2: vitória do Palmeiras sobre o Fluminense.
+INSERT INTO partidas (
+    external_id, temporada_id, rodada, data_hora_utc, status,
+    mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor
+)
+SELECT
+    2000000002, t.id, 1, '2026-02-01 21:30:00', 'FINISHED',
+    mandante.id, visitante.id, 2, 0, 'HOME_TEAM'
+FROM competicoes c
+JOIN temporadas t ON t.competicao_id = c.id
+JOIN clubes mandante ON mandante.external_id = 1769
+JOIN clubes visitante ON visitante.external_id = 1765
+WHERE c.codigo = 'BSA'
+  AND t.ano = (
+      SELECT MAX(t2.ano)
+      FROM temporadas t2
+      WHERE t2.competicao_id = c.id
+  );
 
-INSERT INTO partidas (external_id, temporada_id, rodada, data_hora_utc, status, mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor)
-SELECT 900003, t.id, 1, '2026-02-02 19:00:00', 'FINISHED', m.id, v.id, 2, 1, 'HOME_TEAM'
-FROM temporadas t, clubes m, clubes v
-WHERE t.external_id = 2474 AND m.external_id = 1770 AND v.external_id = 1777; -- BOT 2x1 BAH (BOT ganha 3 pts, mas com -4 de punição fica com -1 pt)
+-- CENÁRIO 3: vitória do Botafogo sobre o Bahia.
+INSERT INTO partidas (
+    external_id, temporada_id, rodada, data_hora_utc, status,
+    mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor
+)
+SELECT
+    2000000003, t.id, 1, '2026-02-02 19:00:00', 'FINISHED',
+    mandante.id, visitante.id, 2, 1, 'HOME_TEAM'
+FROM competicoes c
+JOIN temporadas t ON t.competicao_id = c.id
+JOIN clubes mandante ON mandante.external_id = 1770
+JOIN clubes visitante ON visitante.external_id = 1777
+WHERE c.codigo = 'BSA'
+  AND t.ano = (
+      SELECT MAX(t2.ano)
+      FROM temporadas t2
+      WHERE t2.competicao_id = c.id
+  );
 
--- Partida ADIADA (POSTPONED) com placar NULL (não deve contar pontos nem jogos)
-INSERT INTO partidas (external_id, temporada_id, rodada, data_hora_utc, status, mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor)
-SELECT 900004, t.id, 2, '2026-02-08 19:00:00', 'POSTPONED', m.id, v.id, NULL, NULL, NULL
-FROM temporadas t, clubes m, clubes v
-WHERE t.external_id = 2474 AND m.external_id = 1783 AND v.external_id = 1769;
+-- CENÁRIO 4: partida adiada com placar NULL.
+INSERT INTO partidas (
+    external_id, temporada_id, rodada, data_hora_utc, status,
+    mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor
+)
+SELECT
+    2000000004, t.id, 2, '2026-02-08 19:00:00', 'POSTPONED',
+    mandante.id, visitante.id, NULL, NULL, NULL
+FROM competicoes c
+JOIN temporadas t ON t.competicao_id = c.id
+JOIN clubes mandante ON mandante.external_id = 1783
+JOIN clubes visitante ON visitante.external_id = 1769
+WHERE c.codigo = 'BSA'
+  AND t.ano = (
+      SELECT MAX(t2.ano)
+      FROM temporadas t2
+      WHERE t2.competicao_id = c.id
+  );
 
--- Partida AGENDADA (SCHEDULED) com placar NULL (deve entrar apenas na simulação Monte Carlo)
-INSERT INTO partidas (external_id, temporada_id, rodada, data_hora_utc, status, mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor)
-SELECT 900005, t.id, 2, '2026-02-08 21:30:00', 'SCHEDULED', m.id, v.id, NULL, NULL, NULL
-FROM temporadas t, clubes m, clubes v
-WHERE t.external_id = 2474 AND m.external_id = 1771 AND v.external_id = 1765;
+-- CENÁRIO 5: partida agendada com placar NULL.
+INSERT INTO partidas (
+    external_id, temporada_id, rodada, data_hora_utc, status,
+    mandante_id, visitante_id, gols_mandante, gols_visitante, vencedor
+)
+SELECT
+    2000000005, t.id, 2, '2026-02-08 21:30:00', 'SCHEDULED',
+    mandante.id, visitante.id, NULL, NULL, NULL
+FROM competicoes c
+JOIN temporadas t ON t.competicao_id = c.id
+JOIN clubes mandante ON mandante.external_id = 1771
+JOIN clubes visitante ON visitante.external_id = 1765
+WHERE c.codigo = 'BSA'
+  AND t.ano = (
+      SELECT MAX(t2.ano)
+      FROM temporadas t2
+      WHERE t2.competicao_id = c.id
+  );
+
+COMMIT;
+
+-- Confira se as cinco fixtures foram criadas. Resultado esperado: 5 linhas.
+SELECT external_id, status, gols_mandante, gols_visitante
+FROM partidas
+WHERE external_id BETWEEN 2000000001 AND 2000000005
+ORDER BY external_id;
