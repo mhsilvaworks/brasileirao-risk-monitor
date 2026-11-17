@@ -1,151 +1,153 @@
 # Mapeamento Detalhado de Dados — football-data.org (v4) → MySQL
 
 **Projeto:** Brasileirão Risk Monitor  
-**Fonte de Dados:** `https://api.football-data.org/v4`  
-**Competição:** Campeonato Brasileiro Série A (`code: "BSA"`, `id: 2013`)  
-**Temporada Base do Reconhecimento:** 2026 (`season.id: 2474`, `2026-01-28` a `2026-12-02`)  
-**Data da Validação:** 16/11/2026 (Rodada atual na API: `35` | Partidas disputadas: `341/380`)
+**Fonte:** https://api.football-data.org/v4  
+**Competição:** Campeonato Brasileiro Série A (code `BSA`, id `2013`)  
+**Temporada validada:** 2026 (season.id `2474`, de `2026-01-28` a `2026-12-02`)  
+**Validação registrada:** 16/11/2026 — rodada informada: 35; partidas finalizadas observadas: 341/380.
+
+> Os exemplos JSON em `docs/api-recognition/` são snapshots da consulta realizada em 16/11/2026. Não devem ser tratados como dados atuais permanentes. A temporada e os identificadores devem ser lidos da resposta da API, sem fixar o ID 2474 no código.
 
 ---
 
-## 1. Visão Geral e Regras Globais de Integração
+## 1. Regras globais
 
-1. **Identidade Única (`external_id`):** Nenhum registro será identificado por nome, sigla (`tla`) ou ordem de listagem. Todos os relacionamentos externos utilizam o `id` inteiro fornecido pela API (`UNSIGNED INT`).
-2. **Idempotência no `SyncService`:** As operações de sincronização de clubes e partidas devem utilizar `INSERT ... ON DUPLICATE KEY UPDATE` (upsert) com base na chave única `external_id`.
-3. **Preservação de `NULL` em Placares:** Placares de partidas ainda não iniciadas ou sem resultado computado retornam `null` na API. É proibido converter `null` para `0` na camada de ingestão ou banco de dados, pois `0 x 0` representa um empate real em andamento ou encerrado.
-4. **Padronização de Datas e Fuso Horário:** Todos os timestamps da API (`utcDate`, `lastUpdated`) chegam no formato ISO 8601 em UTC (`Z`). O banco deve armazenar em UTC (`DATETIME` ou `TIMESTAMP`) e a camada de apresentação converte para `America/Sao_Paulo` (`UTC-3`).
-
----
-
-## 2. Endpoint 1: Competição (`GET /competitions/BSA`)
-
-### 2.1. Estrutura e Mapeamento de Campos
-
-| Caminho JSON na API | Exemplo Real | Tipo API | Nullable | Coluna MySQL | Tipo MySQL | Regra de Transformação / Validação |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `id` | `2013` | `integer` | Não | `external_id` | `INT UNSIGNED NOT NULL UNIQUE` | Identificador fixo da competição na API. |
-| `name` | `"Campeonato Brasileiro Série A"` | `string` | Não | `nome` | `VARCHAR(120) NOT NULL` | Trim de espaços extras. |
-| `code` | `"BSA"` | `string` | Não | `codigo` | `VARCHAR(10) NOT NULL UNIQUE` | Código curto usado nas rotas da API. |
-| `emblem` | `"https://crests.football-data.org/bsa.png"` | `string` | Sim | `emblema_url` | `VARCHAR(255) NULL` | Validar URL (`FILTER_VALIDATE_URL`). |
-| `currentSeason.id` | `2474` | `integer` | Não | `temporada_external_id` | `INT UNSIGNED NOT NULL` | Define a temporada ativa sincronizada. |
-| `currentSeason.startDate` | `"2026-01-28"` | `string` | Não | `data_inicio` | `DATE NOT NULL` | Formato `YYYY-MM-DD` direto para `DATE`. |
-| `currentSeason.endDate` | `"2026-12-02"` | `string` | Não | `data_fim` | `DATE NOT NULL` | Formato `YYYY-MM-DD` direto para `DATE`. |
-| `currentSeason.currentMatchday` | `35` | `integer` | **Sim** | `rodada_atual` | `TINYINT UNSIGNED NULL` | Em temporadas históricas (ex.: 2017) pode retornar `null`. |
-| `lastUpdated` | `"2026-10-31T12:49:16Z"` | `string` | Sim | `api_updated_at` | `DATETIME NULL` | Converter ISO 8601 (`Y-m-d\TH:i:s\Z`) para `Y-m-d H:i:s`. |
-
-### 2.2. Inconsistências e Pontos de Atenção
-* O objeto `seasons[]` retorna o histórico desde 2017, mas o sistema deve ler exclusivamente `currentSeason` para evitar mistura de temporadas no mesmo ciclo de sincronização.
-* O campo `currentSeason.currentMatchday` indica a rodada corrente da tabela, mas **não garante** que todas as rodadas anteriores estejam 100% encerradas (ex.: na rodada 35 de 2026, há 341 jogos disputados em vez de 340, indicando jogos antecipados ou adiados).
+1. **Identidade externa:** usar o campo `id` da API como `external_id`. Nunca identificar clubes por nome, sigla ou posição no array.
+2. **Idempotência:** sincronizar por chave única `external_id`, usando upsert. A repetição da mesma sincronização não pode duplicar clubes ou partidas.
+3. **Placar nulo:** preservar `null` recebido da API. Não converter ausência de placar em zero.
+4. **Placar ao vivo:** em uma partida `IN_PLAY`, `0 x 0` pode ser o placar corrente inicial. Isso não significa que a partida terminou empatada.
+5. **Data e hora:** interpretar timestamps ISO 8601 em UTC. Persistir em UTC e converter para `America/Sao_Paulo` somente na apresentação.
+6. **Temporada:** enviar o ano de início no parâmetro `season` dos endpoints que o aceitam (por exemplo, `season=2026`). Guardar também o `currentSeason.id` retornado pela API como identificador externo.
+7. **Payload:** consumir somente os campos necessários ao domínio. Não persistir elenco, treinador, staff, odds ou competições relacionadas nesta etapa.
+8. **Falha da fonte:** em falha HTTP, timeout ou limite 429, manter os últimos dados reais persistidos. Não substituir dados de produção por fixtures fictícias.
+9. **Fixtures:** `FixtureDataProvider` é destinado a testes e desenvolvimento controlado; seus dados devem ser identificados como fixtures e nunca apresentados como dados reais em produção.
 
 ---
 
-## 3. Endpoint 2: Clubes (`GET /competitions/BSA/teams`)
+## 2. Competição — `GET /competitions/BSA`
 
-### 3.1. Estrutura e Mapeamento de Campos
+| Campo JSON | Exemplo observado | Coluna/uso | Regra |
+|---|---|---|---|
+| `id` | `2013` | `competicoes.external_id` | Inteiro externo único |
+| `name` | Campeonato Brasileiro Série A | `nome` | Remover espaços externos |
+| `code` | `BSA` | `codigo` | Código usado nas rotas |
+| `emblem` | URL do emblema | `emblema_url` | Nullable; validar URL |
+| `currentSeason.id` | `2474` | `temporadas.external_id` | Identificador externo da temporada |
+| `currentSeason.startDate` | `2026-01-28` | `data_inicio` | Tipo DATE |
+| `currentSeason.endDate` | `2026-12-02` | `data_fim` | Tipo DATE |
+| `currentSeason.currentMatchday` | `35` | `rodada_atual` | Nullable |
+| `lastUpdated` | ISO 8601 UTC | `api_updated_at` | Converter para DATETIME UTC |
 
-| Caminho JSON (`teams[]`) | Exemplo Real | Tipo API | Nullable | Coluna MySQL (`clubes`) | Tipo MySQL | Regra de Transformação / Validação |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `id` | `1765` | `integer` | Não | `external_id` | `INT UNSIGNED NOT NULL UNIQUE` | **Chave primária de integração.** Obrigatório para upsert. |
-| `name` | `"Fluminense FC"` | `string` | Não | `nome` | `VARCHAR(120) NOT NULL` | Nome oficial registrado na federação/API. |
-| `shortName` | `"Fluminense"` | `string` | **Sim** | `nome_curto` | `VARCHAR(60) NOT NULL` | Caso venha `null` ou vazio, preencher com `name`. |
-| `tla` | `"FLU"` | `string` | **Sim** | `sigla` | `CHAR(3) NOT NULL` | Caso venha `null`, gerar 3 primeiras letras de `shortName` em maiúsculo. **Não aplicar índice `UNIQUE`**. |
-| `crest` | `"https://crests.football-data.org/1765.png"` | `string` | Sim | `escudo_url` | `VARCHAR(255) NULL` | Aceitar `.png` e `.svg`. |
-| `venue` | `"Estadio Jornalista Mário Filho"` | `string` | Sim | `estadio` | `VARCHAR(120) NULL` | Opcional; útil para enriquecimento visual. |
-| `lastUpdated` | `"2024-07-29T17:24:37Z"` | `string` | Sim | `api_updated_at` | `DATETIME NULL` | Converter ISO 8601 UTC para `DATETIME`. |
-
-### 3.2. Inconsistências Encontradas nos Dados Reais (Temporada 2026)
-1. **Colisão de Siglas (`tla`):**
-   * `Coritiba FBC` (`id: 4241`) retorna `tla: "COR"`.
-   * `SC Corinthians Paulista` (`id: 1779`) também retorna `tla: "COR"`.
-   * **Ação no Banco:** A coluna `sigla` **não** pode ter restrição `UNIQUE` no `schema.sql`.
-2. **Padrão de Nomenclatura de Siglas:**
-   * Alguns clubes possuem siglas não intuitivas no Brasil (ex.: `São Paulo FC` → `"PAU"`, `Grêmio FBPA` → `"FBP"`, `Clube do Remo` → `"CRE"`). Manter o valor original da API na sincronização e, se necessário, permitir override visual apenas no frontend/camada de exibição.
-3. **Variação na URL de Escudos (`crest`):**
-   * A maioria segue o padrão `https://crests.football-data.org/{id}.png`, mas a `Chapecoense AF` (`id: 1772`) retorna `https://crests.football-data.org/1772_large.png`. Nunca montar a URL dinamicamente pelo `id`; sempre salvar a string exata de `crest`.
-4. **Payload Extenso (`squad` e `coach`):**
-   * Cada item de `teams[]` traz o elenco completo (`squad[]`) e comissão técnica (`coach`), aumentando o tamanho do JSON. O `ApiDataProvider` deve descartar `squad`, `coach`, `staff` e `runningCompetitions` no parsing para economizar memória.
+O objeto `seasons[]` contém temporadas históricas. A sincronização de uma temporada deve usar somente a temporada selecionada, não misturar os arrays de anos diferentes. `currentMatchday` não garante que todas as partidas das rodadas anteriores estejam encerradas.
 
 ---
 
-## 4. Endpoint 3: Partidas (`GET /competitions/BSA/matches`)
+## 3. Clubes — `GET /competitions/BSA/teams?season=2026`
 
-### 4.1. Estrutura e Mapeamento de Campos
+| Campo JSON (`teams[]`) | Coluna em `clubes` | Regra |
+|---|---|---|
+| `id` | `external_id` | Obrigatório, único |
+| `name` | `nome` | Obrigatório |
+| `shortName` | `nome_curto` | Se ausente/vazio, usar `name` |
+| `tla` | `sigla` | Preservar valor original; não criar UNIQUE |
+| `crest` | `escudo_url` | Preservar URL recebida; pode ser PNG/SVG e variar o padrão |
+| `venue` | `estadio` | Opcional |
+| `lastUpdated` | `api_updated_at` | Nullable; converter UTC |
 
-| Caminho JSON (`matches[]`) | Exemplo Real | Tipo API | Nullable | Coluna MySQL (`partidas`) | Tipo MySQL | Regra de Transformação / Validação |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `id` | `554740` | `integer` | Não | `external_id` | `INT UNSIGNED NOT NULL UNIQUE` | **Chave única de integração.** |
-| `season.id` | `2474` | `integer` | Não | `temporada_external_id` | `INT UNSIGNED NOT NULL` | Garantir que pertence à temporada ativa (`2474`). |
-| `matchday` | `1` | `integer` | **Sim** | `rodada` | `TINYINT UNSIGNED NOT NULL` | Valores de `1` a `38`. |
-| `utcDate` | `"2026-01-28T22:00:00Z"` | `string` | Não | `data_hora_utc` | `DATETIME NOT NULL` | Parse via `DateTimeImmutable($utcDate, new DateTimeZone('UTC'))` → `format('Y-m-d H:i:s')`. |
-| `status` | `"FINISHED"` | `string` | Não | `status` | `VARCHAR(20) NOT NULL` | Validar contra lista de status conhecidos (ver seção 4.2). |
-| `homeTeam.id` | `1766` | `integer` | **Sim*** | `mandante_id` | `INT UNSIGNED NOT NULL` | Traduzir `homeTeam.id` (`external_id`) para `clubes.id` (PK interna). |
-| `awayTeam.id` | `1769` | `integer` | **Sim*** | `visitante_id` | `INT UNSIGNED NOT NULL` | Traduzir `awayTeam.id` (`external_id`) para `clubes.id` (PK interna). |
-| `score.fullTime.home` | `2` ou `null` | `integer` | **Sim** | `gols_mandante` | `TINYINT UNSIGNED NULL` | Se `null`, gravar `NULL`. Se inteiro, cast `(int)`. |
-| `score.fullTime.away` | `2` ou `null` | `integer` | **Sim** | `gols_visitante` | `TINYINT UNSIGNED NULL` | Se `null`, gravar `NULL`. Se inteiro, cast `(int)`. |
-| `score.halfTime.home` | `1` ou `null` | `integer` | **Sim** | `gols_mandante_ht` | `TINYINT UNSIGNED NULL` | Opcional; útil para auditoria de placar no intervalo. |
-| `score.halfTime.away` | `1` ou `null` | `integer` | **Sim** | `gols_visitante_ht` | `TINYINT UNSIGNED NULL` | Opcional; útil para auditoria de placar no intervalo. |
-| `score.winner` | `"DRAW"` ou `null` | `string` | **Sim** | `vencedor` | `VARCHAR(15) NULL` | Valores: `"HOME_TEAM"`, `"AWAY_TEAM"`, `"DRAW"` ou `null`. |
-| `lastUpdated` | `"2026-11-16T00:20:29Z"` | `string` | Sim | `api_updated_at` | `DATETIME NULL` | Controle de alteração da partida. |
+### Observações verificadas
 
-*\*Nota: Em ligas de pontos corridos como o Brasileirão (`REGULAR_SEASON`), `homeTeam.id` e `awayTeam.id` sempre vêm preenchidos; ainda assim, o `SyncService` deve validar a existência de ambos na tabela `clubes` antes de persistir a partida.*
-
-### 4.2. Máquina de Estados (`status`) e Regras de Negócio
-
-| Status na API | Categoria Interna | Entra no Cálculo de Classificação (`StandingsService`)? | Entra no Monitoramento Ao Vivo (Polling 1 min)? | Comportamento Esperado no Sistema |
-| :--- | :--- | :--- | :--- | :--- |
-| `IN_PLAY` | **Ao Vivo** | Sim (provisório, se configurado) ou Apenas Exibição | **Sim** | Partida com bola rolando; exibir badge "AO VIVO" e atualizar placar. |
-| `PAUSED` | **Ao Vivo** | Sim (provisório, se configurado) ou Apenas Exibição | **Sim** | Intervalo de jogo; manter monitoramento ativo até `FINISHED`. |
-| `FINISHED` | **Encerrada** | **Sim (Definitivo)** | Não | Placar consolidado (`fullTime` obrigatório não-nulo). |
-| `AWARDED` | **Encerrada (W.O.)** | **Sim (Definitivo)** | Não | Resultado definido administrativamente (ex.: W.O. 3x0); considerar `score.fullTime`. |
-| `SCHEDULED` | **Agendada** | Não | Não (exceto próximo ao horário) | Partida prevista na tabela, ainda sem horário definitivo confirmado. |
-| `TIMED` | **Agendada** | Não | Não (exceto próximo ao horário) | Partida com data e horário confirmados (`utcDate` definitivo). |
-| `POSTPONED` | **Exceção** | Não | Não | Partida adiada; ignorar placar e sinalizar alerta na rodada. |
-| `SUSPENDED` | **Exceção** | Não (até retomada/decisão) | Não | Partida interrompida; não consolidar pontos até mudança para `FINISHED` ou `AWARDED`. |
-| `CANCELLED` | **Exceção** | Não | Não | Partida cancelada; desconsiderar nos cálculos. |
-
-### 4.3. Inconsistências e Cuidados Críticos
-* **Ordem de Sincronização Obrigatória:** O `SyncService` deve sincronizar `/teams` **antes** de `/matches`, garantindo que todos os `external_id` de `homeTeam.id` e `awayTeam.id` já existam na tabela `clubes` para resolução das chaves estrangeiras (`mandante_id` e `visitante_id`).
-* **Objeto `odds` bloqueado:** No plano gratuito, `odds` sempre retorna `{"msg": "Activate Odds-Package in User-Panel to retrieve odds."}`. Ignorar esse nó completamente.
-* **Horário de Brasília vs UTC:** Jogos noturnos no Brasil (ex.: `21:30` BRT) aparecem na API no dia seguinte em UTC (ex.: `00:30:00Z`). Sempre filtrar partidas do dia considerando o fuso `America/Sao_Paulo`, nunca a data crua em UTC.
+- Há colisão de siglas: Coritiba FBC e SC Corinthians Paulista podem retornar `COR`. Portanto, `sigla` não pode ser UNIQUE.
+- Algumas siglas não correspondem à abreviação usual no Brasil. Preservar o valor da fonte; eventual nome de exibição deve ser separado do dado original.
+- Não construir `crest` a partir do ID. Salvar a URL recebida.
+- Descartar `squad`, `coach`, `staff` e `runningCompetitions` no mapeamento de domínio, pois não fazem parte do escopo.
 
 ---
 
-## 5. Endpoint 4: Classificação (`GET /competitions/BSA/standings`)
+## 4. Partidas — `GET /competitions/BSA/matches?season=2026`
 
-### 5.1. Estrutura e Mapeamento de Campos (Referência de Auditoria)
+| Campo JSON (`matches[]`) | Coluna em `partidas` | Regra |
+|---|---|---|
+| `id` | `external_id` | Obrigatório, único |
+| `season.id` | `temporada_external_id` | Validar temporada selecionada |
+| `matchday` | `rodada` | Nullable; não inventar rodada |
+| `utcDate` | `data_hora_utc` | Obrigatório; armazenar UTC |
+| `status` | `status` | VARCHAR(30), preservar estado recebido |
+| `homeTeam.id` | `mandante_id` | Resolver external_id para PK interna |
+| `awayTeam.id` | `visitante_id` | Resolver external_id para PK interna |
+| `score.fullTime.home` | `gols_mandante` | Nullable; preservar NULL |
+| `score.fullTime.away` | `gols_visitante` | Nullable; preservar NULL |
+| `score.halfTime.home` | `gols_mandante_ht` | Opcional e nullable |
+| `score.halfTime.away` | `gols_visitante_ht` | Opcional e nullable |
+| `score.winner` | `vencedor` | Nullable: HOME_TEAM, AWAY_TEAM, DRAW |
+| `lastUpdated` | `api_updated_at` | Nullable; converter UTC |
 
-Este endpoint **não alimenta diretamente** a tabela principal do sistema, pois o cálculo oficial do projeto é executado pelo `StandingsService` (para suportar `ajuste_pontos` manual, como punições do STJD, e simulações de risco). Ele é utilizado como **oráculo de validação** em testes automatizados e auditoria.
+Antes de persistir uma partida, o serviço deve confirmar que os dois clubes já existem. A ordem de sincronização é clubes antes de partidas. Se um clube não for encontrado, registrar o problema e não persistir uma partida com referência inválida.
 
-| Caminho JSON (`standings[0].table[]`) | Exemplo Real | Tipo API | Nullable | Campo Equivalente (`StandingsService`) | Regra de Comparação |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `position` | `1` | `integer` | Não | `posicao` | Ordem de 1 a 20. |
-| `team.id` | `1783` | `integer` | Não | `clube_external_id` | Chave de cruzamento entre API e cálculo interno. |
-| `playedGames` | `34` | `integer` | Não | `jogos` | Total de partidas com status `FINISHED` ou `AWARDED`. |
-| `won` | `23` | `integer` | Não | `vitorias` | Critério 1 de desempate no Brasileirão. |
-| `draw` | `7` | `integer` | Não | `empates` | — |
-| `lost` | `4` | `integer` | Não | `derrotas` | — |
-| `points` | `76` | `integer` | Não | `pontos_base` | `pontos_final = pontos_base + ajuste_pontos`. |
-| `goalsFor` | `71` | `integer` | Não | `gols_pro` | Critério 3 de desempate no Brasileirão. |
-| `goalsAgainst` | `29` | `integer` | Não | `gols_contra` | — |
-| `goalDifference` | `42` | `integer` | Não | `saldo_gols` | Critério 2 de desempate (`gols_pro - gols_contra`). |
-| `form` | `null` | `string` | **Sim** | `ultimos_jogos` | Retorna `null` na API para o Brasileirão; calcular internamente pelas últimas 5 partidas. |
+### Status e tratamento
 
-### 5.2. Divergências Conhecidas entre API e Regras da CBF
-1. **Critérios de Desempate:** A API ordena internamente por `points` → `goalDifference` → `goalsFor`. No Campeonato Brasileiro (CBF), o primeiro critério de desempate após pontos é o **número de vitórias (`won`)**, antes do saldo de gols (`goalDifference`). O `StandingsService` deve aplicar a regra oficial da CBF:
-   * `Pontos` → `Vitórias` → `Saldo de Gols` → `Gols Pró` → `Confronto Direto`.
-2. **Deduções de Pontos:** Conforme documentação oficial da football-data.org, consultas filtradas podem omitir punições administrativas. Por isso, o campo `ajuste_pontos` (`SIGNED INT DEFAULT 0`) na tabela de clubes/participação é indispensável.
-3. **Campo `form` Nulo:** Como `form` vem `null` para todos os 20 clubes na `BSA`, o histórico recente (ex.: `V-E-V-D-V`) deve ser derivado das últimas 5 partidas finalizadas de cada clube no banco local.
+A coluna deve ser textual (`VARCHAR(30)`), não um ENUM rígido. Preservar o status original e classificar seu comportamento na camada de domínio.
+
+| Status | Interpretação | Classificação definitiva | Monitoramento futuro |
+|---|---|---|---|
+| `IN_PLAY` | Em andamento | Não consolidar como resultado final | Sim |
+| `PAUSED` | Pausa/intervalo | Não consolidar como resultado final | Sim |
+| `FINISHED` | Encerrada | Sim, se placar válido | Não |
+| `AWARDED` | Resultado atribuído | Sim, conforme placar/regulamento | Não |
+| `SCHEDULED` | Agendada | Não | Não |
+| `TIMED` | Agendada com horário | Não | Não |
+| `POSTPONED` | Adiada | Não | Não |
+| `SUSPENDED` | Suspensa | Não até decisão/encerramento | Exige tratamento específico |
+| `CANCELLED` | Cancelada | Não | Não |
+| `EXTRA_TIME` | Prorrogação, se retornada | Não consolidar antes do estado final | Sim, se ocorrer |
+| `PENALTY_SHOOTOUT` | Disputa de pênaltis, se retornada | Não consolidar antes do estado final | Sim, se ocorrer |
+
+A lista é uma referência de estados conhecidos, não uma validação fechada. Status desconhecidos devem ser preservados e registrados para análise, em vez de causar perda de dados. O filtro `LIVE`, quando usado pela API, é um agrupador de partidas ao vivo, não deve ser gravado como status individual.
+
+O monitoramento automático e a consulta periódica de um minuto ficam para a etapa final do projeto. Nesta etapa serão implementadas somente as bases de integração e persistência.
+
+### Horário local
+
+Não filtrar “jogos de hoje” pela data UTC crua. Converter para `America/Sao_Paulo` na camada de apresentação e em consultas que dependam do dia local.
 
 ---
 
-## 6. Limitações de Cota, Rate Limit e Estratégia de Sincronização
+## 5. Classificação — `GET /competitions/BSA/standings?season=2026`
 
-| Recurso / Restrição | Plano Free (Atual — € 0) | Plano Free w/ Livescores (€ 12/mês) | Impacto no Projeto |
-| :--- | :--- | :--- | :--- |
-| **Rate Limit** | **10 requisições / minuto** | **20 requisições / minuto** | Não fazer requisições individuais por clube ou por rodada; usar sempre endpoints em lote (`/teams` e `/matches`). |
-| **Placares Ao Vivo** | Não (atraso na atualização) | Sim (tempo real) | O job de 1 minuto funcionará tecnicamente, mas no plano Free os gols só aparecem após a atualização tardia da fonte. |
-| **HTTP Status de Bloqueio** | `429 Too Many Requests` | `429 Too Many Requests` | O `ApiDataProvider` deve tratar HTTP `429` lendo o header `X-RequestCounter-Reset` e acionando fallback (`FixtureDataProvider` ou cache local). |
+Este endpoint será referência de auditoria, não fonte direta da tabela principal. O `StandingsService` calculará a classificação a partir das partidas finalizadas e dos ajustes administrativos.
 
-### Orçamento de Requisições por Ciclo de Sincronização
-* **Sincronização Completa (Carga Inicial / Diária):** `3 requisições` (`/competitions/BSA` + `/teams` + `/matches`) → **30% do limite por minuto** (folga de 7 requisições).
-* **Sincronização Incremental / Monitoramento Ao Vivo (a cada 1 min):** Apenas `1 requisição` (`GET /competitions/BSA/matches`) → **10% do limite por minuto**, suficiente para atualizar placares e status de todos os jogos da rodada simultaneamente.
+| Campo JSON (`standings[].table[]`) | Uso interno |
+|---|---|
+| `position` | Posição informada pela API, somente comparação |
+| `team.id` | Cruzamento por ID externo |
+| `playedGames` | Jogos disputados |
+| `won`, `draw`, `lost` | Vitórias, empates e derrotas |
+| `points` | Pontos-base para auditoria |
+| `goalsFor`, `goalsAgainst`, `goalDifference` | Gols pró, contra e saldo |
+| `form` | Pode ser null; forma recente será derivada localmente |
+
+A ordenação interna deve seguir a regra de classificação do projeto e o regulamento aplicável à temporada: pontos, vitórias, saldo de gols, gols pró e critérios subsequentes previstos no regulamento, incluindo confronto direto quando aplicável. A tabela da API não deve substituir essa regra.
+
+As deduções administrativas devem ser representadas por ajuste associado à participação do clube na temporada, não como atributo permanente do clube. Recomenda-se a entidade `clubes_temporadas` com `ajuste_pontos`.
+
+---
+
+## 6. Cotas e estratégia de requisição
+
+O limite e os recursos disponíveis dependem do plano contratado e podem mudar. Conferir a página oficial antes de definir valores em produção: https://www.football-data.org/pricing.
+
+- Não fazer uma chamada por clube ou por partida: usar endpoints em lote.
+- Carga inicial: competição, clubes e partidas; classificação pode ser consultada para auditoria.
+- Monitoramento ao vivo a cada minuto é requisito de etapa posterior e depende de um plano que forneça livescores adequados.
+- Tratar HTTP 429 respeitando os cabeçalhos de limite/retentativa retornados pela API. Não presumir que um cabeçalho específico estará sempre presente.
+- Em timeout, erro HTTP ou 429, manter os últimos dados reais persistidos e registrar a falha.
+- O token deve permanecer no backend, em variável de ambiente; nunca enviar a chave ao JavaScript ou versioná-la.
+
+## 7. Contrato de integração previsto
+
+O contrato `DataProviderInterface` fornecerá os payloads de competição, clubes, partidas e classificação. `ApiDataProvider` consultará a football-data.org; `FixtureDataProvider` lerá snapshots JSON controlados para testes/desenvolvimento. Ambos retornarão a mesma estrutura de payload, permitindo que o `SyncService` não dependa da origem.
+
+A camada de provedor não persiste no banco. O `SyncService` valida, normaliza e coordena a persistência, com clubes antes de partidas. A falha da API não autoriza substituir os dados persistidos por fixtures.
+
+## 8. Arquivos de reconhecimento
+
+Os arquivos JSON desta pasta são evidências/snapshots da validação inicial. Podem conter payloads maiores que o necessário; o provedor deve extrair apenas os campos mapeados acima. Não incluir tokens, cabeçalhos de autenticação ou arquivos `.env`.
