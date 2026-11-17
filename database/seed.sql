@@ -1,58 +1,58 @@
-CREATE DATABASE IF NOT EXISTS brasileirao_risco CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE brasileirao_risco;
 
-DROP TABLE IF EXISTS partidas;
-DROP TABLE IF EXISTS clubes;
+-- 1. Competicao oficial (football-data.org: BSA)
+INSERT INTO competicoes (external_id, nome, codigo, emblema_url)
+VALUES (2013, 'Campeonato Brasileiro Série A', 'BSA', 'https://crests.football-data.org/bsa.png')
+ON DUPLICATE KEY UPDATE
+    nome = VALUES(nome),
+    codigo = VALUES(codigo),
+    emblema_url = VALUES(emblema_url);
 
-CREATE TABLE clubes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    sigla CHAR(3) NOT NULL UNIQUE,
-    escudo_url VARCHAR(255) DEFAULT NULL,
-    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+-- 2. Temporada 2026 (external_id: 2474)
+INSERT INTO temporadas (external_id, competicao_id, ano, data_inicio, data_fim, rodada_atual)
+SELECT 2474, id, 2026, '2026-01-28', '2026-12-02', NULL
+FROM competicoes
+WHERE external_id = 2013
+ON DUPLICATE KEY UPDATE
+    ano = VALUES(ano),
+    data_inicio = VALUES(data_inicio),
+    data_fim = VALUES(data_fim);
 
-CREATE TABLE partidas (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    rodada INT NOT NULL,
-    mandante_id INT NOT NULL,
-    visitante_id INT NOT NULL,
-    gols_mandante INT DEFAULT NULL,
-    gols_visitante INT DEFAULT NULL,
-    finalizada BOOLEAN NOT NULL DEFAULT FALSE,
-    data_jogo DATETIME DEFAULT NULL,
-    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (mandante_id) REFERENCES clubes(id) ON DELETE CASCADE,
-    FOREIGN KEY (visitante_id) REFERENCES clubes(id) ON DELETE CASCADE,
-    INDEX idx_rodada (rodada),
-    INDEX idx_finalizada (finalizada)
-) ENGINE=InnoDB;
+-- 3. Carga inicial dos 20 clubes reais da Serie A 2026 (IDs externos oficiais da football-data.org)
+-- Nota: sigla nao possui restricao UNIQUE (ex: COR pertence a Corinthians e Coritiba).
+INSERT INTO clubes (external_id, nome, nome_curto, sigla, escudo_url) VALUES
+(1783, 'CR Flamengo', 'Flamengo', 'FLA', 'https://crests.football-data.org/1783.png'),
+(1769, 'SE Palmeiras', 'Palmeiras', 'PAL', 'https://crests.football-data.org/1769.png'),
+(1771, 'Cruzeiro EC', 'Cruzeiro', 'CRU', 'https://crests.football-data.org/1771.png'),
+(1765, 'Fluminense FC', 'Fluminense', 'FLU', 'https://crests.football-data.org/1765.png'),
+(1768, 'CA Paranaense', 'Paranaense', 'CAP', 'https://crests.football-data.org/1768.png'),
+(1777, 'EC Bahia', 'Bahia', 'BAH', 'https://crests.football-data.org/1777.png'),
+(1766, 'CA Mineiro', 'Mineiro', 'CAM', 'https://crests.football-data.org/1766.png'),
+(4286, 'RB Bragantino', 'Bragantino', 'RBB', 'https://crests.football-data.org/4286.png'),
+(6685, 'Santos FC', 'Santos', 'SAN', 'https://crests.football-data.org/6685.png'),
+(1776, 'São Paulo FC', 'São Paulo', 'PAU', 'https://crests.football-data.org/1776.png'),
+(1780, 'CR Vasco da Gama', 'Vasco da Gama', 'VAS', 'https://crests.football-data.org/1780.png'),
+(1770, 'Botafogo FR', 'Botafogo', 'BOT', 'https://crests.football-data.org/1770.png'),
+(4241, 'Coritiba FBC', 'Coritiba', 'COR', 'https://crests.football-data.org/4241.png'),
+(4364, 'Mirassol FC', 'Mirassol', 'MIR', 'https://crests.football-data.org/4364.png'),
+(1782, 'EC Vitória', 'Vitória', 'VIT', 'https://crests.football-data.org/1782.png'),
+(6684, 'SC Internacional', 'Internacional', 'SCI', 'https://crests.football-data.org/6684.png'),
+(1779, 'SC Corinthians Paulista', 'Corinthians', 'COR', 'https://crests.football-data.org/1779.png'),
+(1767, 'Grêmio FBPA', 'Grêmio', 'FBP', 'https://crests.football-data.org/1767.png'),
+(4287, 'Clube do Remo', 'Remo', 'CRE', 'https://crests.football-data.org/4287.png'),
+(1772, 'Chapecoense AF', 'Chapecoense', 'CHA', 'https://crests.football-data.org/1772_large.png')
+ON DUPLICATE KEY UPDATE
+    nome = VALUES(nome),
+    nome_curto = VALUES(nome_curto),
+    sigla = VALUES(sigla),
+    escudo_url = VALUES(escudo_url);
 
--- 20 Clubes da Série A
-INSERT INTO clubes (id, nome, sigla) VALUES
-(1, 'Atlético-MG', 'CAM'), (2, 'Bahia', 'BAH'), (3, 'Botafogo', 'BOT'),
-(4, 'Corinthians', 'COR'), (5, 'Cruzeiro', 'CRU'), (6, 'Flamengo', 'FLA'),
-(7, 'Fluminense', 'FLU'), (8, 'Fortaleza', 'FOR'), (9, 'Grêmio', 'GRE'),
-(10, 'Internacional', 'INT'), (11, 'Juventude', 'JUV'), (12, 'Palmeiras', 'PAL'),
-(13, 'Red Bull Bragantino', 'RBB'), (14, 'São Paulo', 'SAO'), (15, 'Vasco da Gama', 'VAS'),
-(16, 'Vitória', 'VIT'), (17, 'Santos', 'SAN'), (18, 'Mirassol', 'MIR'),
-(19, 'Sport', 'SPT'), (20, 'Ceará', 'CEA');
-
--- Amostra de partidas finalizadas e futuras para validar cálculos
-INSERT INTO partidas (rodada, mandante_id, visitante_id, gols_mandante, gols_visitante, finalizada) VALUES
-(1, 6, 12, 2, 1, TRUE),  -- FLA 2x1 PAL
-(1, 3, 14, 1, 0, TRUE),  -- BOT 1x0 SAO
-(1, 8, 10, 1, 1, TRUE),  -- FOR 1x1 INT
-(1, 5, 1, 0, 2, TRUE),   -- CRU 0x2 CAM
-(1, 2, 4, 3, 1, TRUE),   -- BAH 3x1 COR
-(2, 12, 3, 2, 2, TRUE),  -- PAL 2x2 BOT
-(2, 14, 6, 1, 2, TRUE),  -- SAO 1x2 FLA
-(2, 10, 5, 2, 0, TRUE),  -- INT 2x0 CRU
-(2, 1, 2, 1, 1, TRUE),   -- CAM 1x1 BAH
-(2, 4, 8, 0, 1, TRUE),   -- COR 0x1 FOR
--- Jogos pendentes (serão simulados)
-(3, 6, 3, NULL, NULL, FALSE),
-(3, 12, 8, NULL, NULL, FALSE),
-(3, 14, 10, NULL, NULL, FALSE),
-(3, 1, 4, NULL, NULL, FALSE),
-(3, 2, 5, NULL, NULL, FALSE);
+-- 4. Vinculo dos 20 clubes na temporada 2026 com ajuste_pontos padrao = 0 (sem resultados ficticios)
+INSERT INTO clubes_temporadas (temporada_id, clube_id, ajuste_pontos, motivo_ajuste)
+SELECT t.id, c.id, 0, NULL
+FROM temporadas t
+CROSS JOIN clubes c
+WHERE t.external_id = 2474
+  AND c.external_id IN (1783, 1769, 1771, 1765, 1768, 1777, 1766, 4286, 6685, 1776, 1780, 1770, 4241, 4364, 1782, 6684, 1779, 1767, 4287, 1772)
+ON DUPLICATE KEY UPDATE
+    temporada_id = VALUES(temporada_id);
