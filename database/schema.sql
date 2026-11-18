@@ -75,10 +75,10 @@ CREATE TABLE IF NOT EXISTS temporadas (
     id            INT    NOT NULL AUTO_INCREMENT,
     external_id   INT             NOT NULL,
     competicao_id INT    NOT NULL,
-    ano           SMALLINT NOT NULL,
+    ano           INT             NOT NULL,
     data_inicio   DATE            NOT NULL,
     data_fim      DATE            NOT NULL,
-    rodada_atual  TINYINT DEFAULT NULL,
+    rodada_atual  INT             DEFAULT NULL,
     api_updated_at DATETIME       DEFAULT NULL COMMENT 'UTC',
     criado_em     TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -170,15 +170,15 @@ CREATE TABLE IF NOT EXISTS partidas (
     id               INT      NOT NULL AUTO_INCREMENT,
     external_id      INT               NOT NULL,
     temporada_id     INT      NOT NULL,
-    rodada           TINYINT  DEFAULT NULL,
+    rodada           INT               DEFAULT NULL,
     data_hora_utc    DATETIME          NOT NULL COMMENT 'UTC',
     status           VARCHAR(30)       NOT NULL,
     mandante_id      INT      NOT NULL,
     visitante_id     INT      NOT NULL,
-    gols_mandante    SMALLINT DEFAULT NULL,
-    gols_visitante   SMALLINT DEFAULT NULL,
-    gols_mandante_ht SMALLINT DEFAULT NULL,
-    gols_visitante_ht SMALLINT DEFAULT NULL,
+    gols_mandante    INT               DEFAULT NULL,
+    gols_visitante   INT               DEFAULT NULL,
+    gols_mandante_ht INT               DEFAULT NULL,
+    gols_visitante_ht INT               DEFAULT NULL,
     vencedor         VARCHAR(20)       DEFAULT NULL
         COMMENT 'HOME_TEAM | AWAY_TEAM | DRAW | NULL',
     api_updated_at   DATETIME          DEFAULT NULL COMMENT 'UTC',
@@ -212,7 +212,7 @@ CREATE TABLE IF NOT EXISTS simulacoes_usuarios (
     id            INT      NOT NULL AUTO_INCREMENT,
     usuario_id    INT      NOT NULL,
     clube_id      INT      NOT NULL,
-    posicao_alvo  TINYINT  NOT NULL COMMENT '1–20',
+    posicao_alvo  TINYINT UNSIGNED  NOT NULL COMMENT '1–20',
     cenarios_json JSON              NOT NULL
         COMMENT '3 cenários hipotéticos gerados pelo JavaScript',
     criado_em     TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -231,16 +231,16 @@ CREATE TABLE IF NOT EXISTS simulacoes_usuarios (
 -- sync_logs
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sync_logs (
-    id                    BIGINT NOT NULL AUTO_INCREMENT,
+    id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     tipo                  VARCHAR(40)     NOT NULL
         COMMENT 'sincronizacao | competicao | temporada | clubes | partidas',
     status                VARCHAR(20)     NOT NULL
         COMMENT 'running | success | partial | failed',
     mensagem              VARCHAR(500)    DEFAULT NULL,
-    registros_processados INT    NOT NULL DEFAULT 0,
+    registros_processados INT UNSIGNED    NOT NULL DEFAULT 0,
     iniciado_em           DATETIME        NOT NULL COMMENT 'UTC',
     finalizado_em         DATETIME        DEFAULT NULL COMMENT 'UTC; NULL enquanto executa',
-    duracao_ms            INT    DEFAULT NULL,
+    duracao_ms            INT UNSIGNED    DEFAULT NULL,
     detalhes_json         JSON            DEFAULT NULL,
     criado_em             TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
