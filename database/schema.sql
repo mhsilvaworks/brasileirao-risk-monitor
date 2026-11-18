@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS clubes_temporadas (
 -- -----------------------------------------------------------------------------
 -- partidas
 -- [DT-04] status VARCHAR(30), não ENUM — ver decisão técnica acima
--- gols: SMALLINT nullable (alinhado ao dicionário v1.0)
+-- gols: INT nullable (mantido compatível com o schema anterior)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partidas (
     id               INT      NOT NULL AUTO_INCREMENT,
