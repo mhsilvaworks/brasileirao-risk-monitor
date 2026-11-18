@@ -54,7 +54,7 @@ USE brasileirao_risco;
 --         Ver decisão técnica DT-01 acima.)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS competicoes (
-    id            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    id            INT    NOT NULL AUTO_INCREMENT,
     external_id   INT             NOT NULL,
     nome          VARCHAR(120)    NOT NULL,
     codigo        VARCHAR(20)     NOT NULL,
@@ -72,13 +72,13 @@ CREATE TABLE IF NOT EXISTS competicoes (
 -- temporadas
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS temporadas (
-    id            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    id            INT    NOT NULL AUTO_INCREMENT,
     external_id   INT             NOT NULL,
-    competicao_id INT UNSIGNED    NOT NULL,
-    ano           SMALLINT UNSIGNED NOT NULL,
+    competicao_id INT    NOT NULL,
+    ano           SMALLINT NOT NULL,
     data_inicio   DATE            NOT NULL,
     data_fim      DATE            NOT NULL,
-    rodada_atual  TINYINT UNSIGNED DEFAULT NULL,
+    rodada_atual  TINYINT DEFAULT NULL,
     api_updated_at DATETIME       DEFAULT NULL COMMENT 'UTC',
     criado_em     TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS temporadas (
 -- clubes
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clubes (
-    id            INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    id            INT    NOT NULL AUTO_INCREMENT,
     external_id   INT             NOT NULL,
     nome          VARCHAR(120)    NOT NULL,
     nome_curto    VARCHAR(80)     NOT NULL,
@@ -116,11 +116,11 @@ CREATE TABLE IF NOT EXISTS clubes (
 -- [DT-05] clube_favorito_id nullable — ver decisão técnica acima
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS usuarios (
-    id                 INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    id                 INT    NOT NULL AUTO_INCREMENT,
     nome               VARCHAR(120)    NOT NULL,
     email              VARCHAR(190)    NOT NULL,
     senha_hash         VARCHAR(255)    NOT NULL,
-    clube_favorito_id  INT UNSIGNED    DEFAULT NULL,
+    clube_favorito_id  INT    DEFAULT NULL,
     criado_em          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em      TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP
                                        ON UPDATE CURRENT_TIMESTAMP,
@@ -136,9 +136,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- [DT-03] sem colunas de estatística de partida — classificação é derivada
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clubes_temporadas (
-    id                           INT UNSIGNED    NOT NULL AUTO_INCREMENT,
-    temporada_id                 INT UNSIGNED    NOT NULL,
-    clube_id                     INT UNSIGNED    NOT NULL,
+    id                           INT    NOT NULL AUTO_INCREMENT,
+    temporada_id                 INT    NOT NULL,
+    clube_id                     INT    NOT NULL,
     ajuste_pontos                INT             NOT NULL DEFAULT 0,
     motivo_ajuste                VARCHAR(255)    DEFAULT NULL,
     probabilidade_campeao        DECIMAL(5,2)    DEFAULT NULL COMMENT '0.00–100.00',
@@ -164,21 +164,21 @@ CREATE TABLE IF NOT EXISTS clubes_temporadas (
 -- -----------------------------------------------------------------------------
 -- partidas
 -- [DT-04] status VARCHAR(30), não ENUM — ver decisão técnica acima
--- gols: SMALLINT UNSIGNED nullable (alinhado ao dicionário v1.0)
+-- gols: SMALLINT nullable (alinhado ao dicionário v1.0)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS partidas (
-    id               INT UNSIGNED      NOT NULL AUTO_INCREMENT,
+    id               INT      NOT NULL AUTO_INCREMENT,
     external_id      INT               NOT NULL,
-    temporada_id     INT UNSIGNED      NOT NULL,
-    rodada           TINYINT UNSIGNED  DEFAULT NULL,
+    temporada_id     INT      NOT NULL,
+    rodada           TINYINT  DEFAULT NULL,
     data_hora_utc    DATETIME          NOT NULL COMMENT 'UTC',
     status           VARCHAR(30)       NOT NULL,
-    mandante_id      INT UNSIGNED      NOT NULL,
-    visitante_id     INT UNSIGNED      NOT NULL,
-    gols_mandante    SMALLINT UNSIGNED DEFAULT NULL,
-    gols_visitante   SMALLINT UNSIGNED DEFAULT NULL,
-    gols_mandante_ht SMALLINT UNSIGNED DEFAULT NULL,
-    gols_visitante_ht SMALLINT UNSIGNED DEFAULT NULL,
+    mandante_id      INT      NOT NULL,
+    visitante_id     INT      NOT NULL,
+    gols_mandante    SMALLINT DEFAULT NULL,
+    gols_visitante   SMALLINT DEFAULT NULL,
+    gols_mandante_ht SMALLINT DEFAULT NULL,
+    gols_visitante_ht SMALLINT DEFAULT NULL,
     vencedor         VARCHAR(20)       DEFAULT NULL
         COMMENT 'HOME_TEAM | AWAY_TEAM | DRAW | NULL',
     api_updated_at   DATETIME          DEFAULT NULL COMMENT 'UTC',
@@ -209,10 +209,10 @@ CREATE TABLE IF NOT EXISTS partidas (
 --   alternativa: SET NULL em clube_id — requer torná-lo nullable).
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS simulacoes_usuarios (
-    id            INT UNSIGNED      NOT NULL AUTO_INCREMENT,
-    usuario_id    INT UNSIGNED      NOT NULL,
-    clube_id      INT UNSIGNED      NOT NULL,
-    posicao_alvo  TINYINT UNSIGNED  NOT NULL COMMENT '1–20',
+    id            INT      NOT NULL AUTO_INCREMENT,
+    usuario_id    INT      NOT NULL,
+    clube_id      INT      NOT NULL,
+    posicao_alvo  TINYINT  NOT NULL COMMENT '1–20',
     cenarios_json JSON              NOT NULL
         COMMENT '3 cenários hipotéticos gerados pelo JavaScript',
     criado_em     TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -231,16 +231,16 @@ CREATE TABLE IF NOT EXISTS simulacoes_usuarios (
 -- sync_logs
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sync_logs (
-    id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    id                    BIGINT NOT NULL AUTO_INCREMENT,
     tipo                  VARCHAR(40)     NOT NULL
         COMMENT 'sincronizacao | competicao | temporada | clubes | partidas',
     status                VARCHAR(20)     NOT NULL
         COMMENT 'running | success | partial | failed',
     mensagem              VARCHAR(500)    DEFAULT NULL,
-    registros_processados INT UNSIGNED    NOT NULL DEFAULT 0,
+    registros_processados INT    NOT NULL DEFAULT 0,
     iniciado_em           DATETIME        NOT NULL COMMENT 'UTC',
     finalizado_em         DATETIME        DEFAULT NULL COMMENT 'UTC; NULL enquanto executa',
-    duracao_ms            INT UNSIGNED    DEFAULT NULL,
+    duracao_ms            INT    DEFAULT NULL,
     detalhes_json         JSON            DEFAULT NULL,
     criado_em             TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
