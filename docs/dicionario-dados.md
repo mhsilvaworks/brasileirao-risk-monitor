@@ -14,7 +14,7 @@
 
 - Tabelas e colunas em português, `snake_case`, no plural para tabelas.
 - Classes PHP em `PascalCase`; métodos e variáveis em `camelCase`.
-- Chaves primárias internas: `id` (`INT UNSIGNED AUTO_INCREMENT`).
+- Chaves primárias internas: `id` (`INT AUTO_INCREMENT`).
 - Identificadores da football-data.org: `external_id` (`INT NOT NULL UNIQUE`). Nunca identificar clube, competição, temporada ou partida pelo nome, código visual ou sigla.
 - FKs usam o nome da entidade + `_id`: `clube_id`, `temporada_id`, `competicao_id`.
 - Charset/collation: `utf8mb4` / `utf8mb4_unicode_ci`; engine InnoDB.
@@ -60,7 +60,7 @@ clubes      1 ─── N simulacoes_usuarios
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | external_id | INT NOT NULL | Sim | UNIQUE | ID da competição na football-data.org |
 | nome | VARCHAR(120) | Sim | — | Nome oficial |
 | codigo | VARCHAR(20) | Sim | UNIQUE | Código da competição (ex.: BSA) |
@@ -77,13 +77,13 @@ clubes      1 ─── N simulacoes_usuarios
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | external_id | INT NOT NULL | Sim | UNIQUE | ID da temporada na API |
-| competicao_id | INT UNSIGNED | Sim | FK → competicoes.id | Competição à qual pertence |
-| ano | SMALLINT UNSIGNED | Sim | — | Ano da temporada |
+| competicao_id | INT | Sim | FK → competicoes.id | Competição à qual pertence |
+| ano | SMALLINT | Sim | — | Ano da temporada |
 | data_inicio | DATE | Sim | — | Início da temporada |
 | data_fim | DATE | Sim | — | Fim previsto/registrado |
-| rodada_atual | TINYINT UNSIGNED | Não | NULL permitido | Rodada atual, quando informada |
+| rodada_atual | TINYINT | Não | NULL permitido | Rodada atual, quando informada |
 | api_updated_at | DATETIME | Não | UTC | Atualização da fonte |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Alteração local |
@@ -96,7 +96,7 @@ clubes      1 ─── N simulacoes_usuarios
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | external_id | INT NOT NULL | Sim | UNIQUE | ID do clube na API |
 | nome | VARCHAR(120) | Sim | — | Nome completo |
 | nome_curto | VARCHAR(80) | Sim | — | Nome curto para interface |
@@ -119,11 +119,11 @@ Contas do portal. Senhas nunca são armazenadas em texto puro.
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | nome | VARCHAR(120) | Sim | — | Nome de exibição |
 | email | VARCHAR(190) | Sim | UNIQUE | Login do usuário |
 | senha_hash | VARCHAR(255) | Sim | — | Resultado de `password_hash()` |
-| clube_favorito_id | INT UNSIGNED | Não | FK → clubes.id, NULL permitido | Clube favorito (DT-05) |
+| clube_favorito_id | INT | Não | FK → clubes.id, NULL permitido | Clube favorito (DT-05) |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Cadastro |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Última alteração |
 
@@ -141,9 +141,9 @@ Tabela associativa: participação de um clube em uma temporada, ajustes adminis
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
-| temporada_id | INT UNSIGNED | Sim | FK → temporadas.id | Temporada |
-| clube_id | INT UNSIGNED | Sim | FK → clubes.id | Clube participante |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
+| temporada_id | INT | Sim | FK → temporadas.id | Temporada |
+| clube_id | INT | Sim | FK → clubes.id | Clube participante |
 | ajuste_pontos | INT NOT NULL | Sim | DEFAULT 0 | Ajuste administrativo de pontos |
 | motivo_ajuste | VARCHAR(255) | Não | NULL permitido | Justificativa do ajuste |
 | probabilidade_campeao | DECIMAL(5,2) | Não | 0.00–100.00 | Probabilidade estimada de título |
@@ -171,24 +171,24 @@ Exemplo válido de `probabilidades_posicoes`:
 
 ---
 
-### 3.6 `partidas` [ALTERADO — tipos de gols corrigidos para SMALLINT UNSIGNED]
+### 3.6 `partidas` [ALTERADO — tipos de gols corrigidos para SMALLINT]
 
 Partidas da temporada, incluindo jogos agendados, em andamento e finalizados.
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | external_id | INT NOT NULL | Sim | UNIQUE | ID da partida na API |
-| temporada_id | INT UNSIGNED | Sim | FK → temporadas.id | Temporada |
-| rodada | TINYINT UNSIGNED | Não | NULL permitido | Número da rodada |
+| temporada_id | INT | Sim | FK → temporadas.id | Temporada |
+| rodada | INT | Não | NULL permitido | Número da rodada |
 | data_hora_utc | DATETIME | Sim | UTC | Data/hora de início em UTC |
 | status | VARCHAR(30) | Sim | Não usar ENUM (DT-04) | Status recebido/normalizado |
-| mandante_id | INT UNSIGNED | Sim | FK → clubes.id | Clube mandante |
-| visitante_id | INT UNSIGNED | Sim | FK → clubes.id | Clube visitante |
-| gols_mandante | SMALLINT UNSIGNED | Não | NULL permitido | Gols do mandante no fim |
-| gols_visitante | SMALLINT UNSIGNED | Não | NULL permitido | Gols do visitante no fim |
-| gols_mandante_ht | SMALLINT UNSIGNED | Não | NULL permitido | Gols do mandante no intervalo |
-| gols_visitante_ht | SMALLINT UNSIGNED | Não | NULL permitido | Gols do visitante no intervalo |
+| mandante_id | INT | Sim | FK → clubes.id | Clube mandante |
+| visitante_id | INT | Sim | FK → clubes.id | Clube visitante |
+| gols_mandante | SMALLINT | Não | NULL permitido | Gols do mandante no fim |
+| gols_visitante | SMALLINT | Não | NULL permitido | Gols do visitante no fim |
+| gols_mandante_ht | SMALLINT | Não | NULL permitido | Gols do mandante no intervalo |
+| gols_visitante_ht | SMALLINT | Não | NULL permitido | Gols do visitante no intervalo |
 | vencedor | VARCHAR(20) | Não | NULL permitido | HOME_TEAM, AWAY_TEAM, DRAW ou NULL |
 | api_updated_at | DATETIME | Não | UTC | Atualização da fonte |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
@@ -208,10 +208,10 @@ Armazena os conjuntos de 3 cenários hipotéticos gerados pelo JavaScript e salv
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | INT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador interno |
-| usuario_id | INT UNSIGNED | Sim | FK → usuarios.id | Usuário que salvou |
-| clube_id | INT UNSIGNED | Sim | FK → clubes.id | Clube do cenário |
-| posicao_alvo | TINYINT UNSIGNED | Sim | 1–20 | Posição final desejada |
+| id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
+| usuario_id | INT | Sim | FK → usuarios.id | Usuário que salvou |
+| clube_id | INT | Sim | FK → clubes.id | Clube do cenário |
+| posicao_alvo | TINYINT | Sim | 1–20 | Posição final desejada |
 | cenarios_json | JSON NOT NULL | Sim | — | Os 3 cenários hipotéticos gerados pelo JS |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Momento do salvamento |
 
@@ -236,14 +236,14 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | BIGINT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador do evento |
+| id | BIGINT AUTO_INCREMENT | Sim | PK | Identificador do evento |
 | tipo | VARCHAR(40) | Sim | — | Operação: sincronizacao, competicao, temporada, clubes ou partidas |
 | status | VARCHAR(20) | Sim | — | running, success, partial ou failed |
 | mensagem | VARCHAR(500) | Não | NULL permitido | Resumo seguro do resultado/erro |
-| registros_processados | INT UNSIGNED | Sim | DEFAULT 0 | Quantidade de registros tratados |
+| registros_processados | INT | Sim | DEFAULT 0 | Quantidade de registros tratados |
 | iniciado_em | DATETIME | Sim | UTC | Início da operação |
 | finalizado_em | DATETIME | Não | UTC, NULL enquanto executa | Fim da operação |
-| duracao_ms | INT UNSIGNED | Não | NULL permitido | Duração em milissegundos |
+| duracao_ms | INT | Não | NULL permitido | Duração em milissegundos |
 | detalhes_json | JSON | Não | NULL permitido | Metadados técnicos não sensíveis |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação do log |
 
@@ -317,7 +317,8 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 ## 6. Documentos que devem ser consultados
 
 - `docs/documentacao_projeto_arena.md` v2.1: **referência funcional aprovada**.
-- `database/schema.sql`: estrutura física reconciliada; deve refletir este dicionário.
+- `database/schema.sql`: estrutura completa para banco novo.
+- `database/migrations/001_alinhar_schema_mvp.sql`: migração incremental, repetível e não destrutiva para bancos existentes.
 - `database/seed.sql`: dados de inicialização; verificar coerência com PR #39.
 - `docs/api-recognition/mapeamento-dados.md`: mapeamento football-data.org v4 → MySQL.
 - `docs/api-recognition/contrato-provedores.md`: contrato dos provedores e regras de fixtures/API.
@@ -343,41 +344,20 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 - Usuário é autenticado por hash e não acessa dados de outra conta.
 - **[NOVO]** Exclusão de usuário remove em cascata todos os registros em `simulacoes_usuarios`.
 - **[NOVO]** `simulacoes_usuarios.cenarios_json` armazena exatamente 3 cenários estruturados.
-- **[NOVO]** Reexecução do schema em banco limpo e em banco com dados existentes é segura (`CREATE TABLE IF NOT EXISTS`).
+- **[NOVO]** Schema de banco novo e migração incremental de banco existente são executados separadamente e sem apagar dados.
 
 ---
 
-## 8. Instruções de migração / aplicação do schema [NOVO]
+## 8. Instalação e migração do banco
 
-O `schema.sql` usa `CREATE TABLE IF NOT EXISTS` em todas as tabelas. A aplicação em banco limpo cria todas as estruturas. A aplicação em banco existente:
+- **Banco novo:** executar `database/schema.sql`. O arquivo cria as tabelas completas.
+- **Banco já existente (schema anterior do PR #38):** fazer backup e executar `database/migrations/001_alinhar_schema_mvp.sql`.
+- A migração verifica cada coluna de probabilidade em `clubes_temporadas` por meio de `INFORMATION_SCHEMA`, cria somente as ausentes e cria as tabelas novas com `CREATE TABLE IF NOT EXISTS`.
+- A migração não altera tipos de PK/FK nem converte placares existentes. Os IDs internos permanecem `INT` signed para manter compatibilidade com as tabelas existentes.
+- Reexecutar `schema.sql` não atualiza a definição de tabelas já existentes; por isso, não substitui a migração.
+- Executar primeiro em uma cópia de desenvolvimento e validar FKs, colunas e contagens antes de aplicar em ambiente com dados reais.
 
-- **tabelas já existentes** com estrutura compatível: nenhuma ação destrutiva.
-- **tabelas novas** (`usuarios`, `simulacoes_usuarios`): criadas sem afetar dados existentes.
-- **colunas ausentes** em tabelas existentes (ex.: colunas de probabilidade em `clubes_temporadas`): requerem `ALTER TABLE` separado.
-
-### Script de migração incremental (executar apenas se o banco já existir)
-
-```sql
--- Adicionar colunas de probabilidade em clubes_temporadas (se ausentes)
-ALTER TABLE clubes_temporadas
-    ADD COLUMN IF NOT EXISTS probabilidade_campeao        DECIMAL(5,2) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS probabilidade_libertadores   DECIMAL(5,2) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS probabilidade_sulamericana   DECIMAL(5,2) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS probabilidade_rebaixamento   DECIMAL(5,2) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS probabilidades_posicoes      JSON         DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS probabilidades_calculadas_em DATETIME     DEFAULT NULL;
-
--- Corrigir tipo de gols de INT para SMALLINT UNSIGNED (se necessário)
-ALTER TABLE partidas
-    MODIFY COLUMN gols_mandante    SMALLINT UNSIGNED DEFAULT NULL,
-    MODIFY COLUMN gols_visitante   SMALLINT UNSIGNED DEFAULT NULL,
-    MODIFY COLUMN gols_mandante_ht SMALLINT UNSIGNED DEFAULT NULL,
-    MODIFY COLUMN gols_visitante_ht SMALLINT UNSIGNED DEFAULT NULL;
-```
-
-> As tabelas `usuarios` e `simulacoes_usuarios` são criadas pelo `CREATE TABLE IF NOT EXISTS` do `schema.sql` principal; não requerem ALTER.
-
----
+--- 
 
 ## 9. Fora do modelo obrigatório do MVP
 
