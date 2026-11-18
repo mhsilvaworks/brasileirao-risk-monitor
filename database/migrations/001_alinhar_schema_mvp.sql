@@ -119,6 +119,37 @@ CREATE TABLE IF NOT EXISTS sync_logs (
     criado_em             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Alinhar a regra de exclusão da competição com o schema atual.
+-- Primeiro remove a FK antiga, se existir e não usar RESTRICT.
+SET @ddl = IF(
+    (SELECT COUNT(*)
+     FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'temporadas'
+       AND CONSTRAINT_NAME = 'fk_temporadas_competicao'
+       AND DELETE_RULE <> 'RESTRICT') > 0,
+    'ALTER TABLE temporadas DROP FOREIGN KEY fk_temporadas_competicao',
+    'SELECT 1'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 
+-- Cria a FK com RESTRICT somente se ela ainda não existir.
+SET @ddl = IF(
+    (SELECT COUNT(*)
+     FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'temporadas'
+       AND CONSTRAINT_NAME = 'fk_temporadas_competicao') = 0,
+    'ALTER TABLE temporadas
+     ADD CONSTRAINT fk_temporadas_competicao
+     FOREIGN KEY (competicao_id) REFERENCES competicoes(id)
+     ON DELETE RESTRICT',
+    'SELECT 1'
+);
+PREPARE migration_stmt FROM @ddl;
+EXECUTE migration_stmt;
+DEALLOCATE PREPARE migration_stmt;
 -- Não altera tipos de PK/FK ou placares já existentes: evita conversões
 -- desnecessárias e preserva a compatibilidade com registros do banco anterior.
