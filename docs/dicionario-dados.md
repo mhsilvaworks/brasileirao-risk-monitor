@@ -6,7 +6,7 @@
 **Stack:** PHP 8.3, MySQL 8, PDO, football-data.org v4  
 **Objetivo:** definir um contrato único para banco, serviços, repositórios, sincronização, cálculos e interface.
 
-> Este documento foi reconciliado com a especificação v2.1 no contexto da **Issue #XX**. As seções alteradas em relação ao dicionário v1.0 estão marcadas com `[ALTERADO]` ou `[NOVO]`. Decisões técnicas que divergem do texto do documento v2.1 estão registradas na seção 10.
+> Este documento foi reconciliado com a especificação v2.1 no contexto da **Issue #1**. As seções alteradas em relação ao dicionário v1.0 estão marcadas com `[ALTERADO]` ou `[NOVO]`. Decisões técnicas que divergem do texto do documento v2.1 estão registradas na seção 10.
 
 ---
 
@@ -80,10 +80,10 @@ clubes      1 ─── N simulacoes_usuarios
 | id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | external_id | INT NOT NULL | Sim | UNIQUE | ID da temporada na API |
 | competicao_id | INT | Sim | FK → competicoes.id | Competição à qual pertence |
-| ano | SMALLINT | Sim | — | Ano da temporada |
+| ano | INT | Sim | — | Ano da temporada |
 | data_inicio | DATE | Sim | — | Início da temporada |
 | data_fim | DATE | Sim | — | Fim previsto/registrado |
-| rodada_atual | TINYINT | Não | NULL permitido | Rodada atual, quando informada |
+| rodada_atual | INT | Não | NULL permitido | Rodada atual, quando informada |
 | api_updated_at | DATETIME | Não | UTC | Atualização da fonte |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Alteração local |
@@ -185,10 +185,10 @@ Partidas da temporada, incluindo jogos agendados, em andamento e finalizados.
 | status | VARCHAR(30) | Sim | Não usar ENUM (DT-04) | Status recebido/normalizado |
 | mandante_id | INT | Sim | FK → clubes.id | Clube mandante |
 | visitante_id | INT | Sim | FK → clubes.id | Clube visitante |
-| gols_mandante | SMALLINT | Não | NULL permitido | Gols do mandante no fim |
-| gols_visitante | SMALLINT | Não | NULL permitido | Gols do visitante no fim |
-| gols_mandante_ht | SMALLINT | Não | NULL permitido | Gols do mandante no intervalo |
-| gols_visitante_ht | SMALLINT | Não | NULL permitido | Gols do visitante no intervalo |
+| gols_mandante | INT | Não | NULL permitido | Gols do mandante no fim |
+| gols_visitante | INT | Não | NULL permitido | Gols do visitante no fim |
+| gols_mandante_ht | INT | Não | NULL permitido | Gols do mandante no intervalo |
+| gols_visitante_ht | INT | Não | NULL permitido | Gols do visitante no intervalo |
 | vencedor | VARCHAR(20) | Não | NULL permitido | HOME_TEAM, AWAY_TEAM, DRAW ou NULL |
 | api_updated_at | DATETIME | Não | UTC | Atualização da fonte |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
@@ -211,7 +211,7 @@ Armazena os conjuntos de 3 cenários hipotéticos gerados pelo JavaScript e salv
 | id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | usuario_id | INT | Sim | FK → usuarios.id | Usuário que salvou |
 | clube_id | INT | Sim | FK → clubes.id | Clube do cenário |
-| posicao_alvo | TINYINT | Sim | 1–20 | Posição final desejada |
+| posicao_alvo | TINYINT UNSIGNED | Sim | 1–20 | Posição final desejada |
 | cenarios_json | JSON NOT NULL | Sim | — | Os 3 cenários hipotéticos gerados pelo JS |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Momento do salvamento |
 
@@ -236,14 +236,14 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
-| id | BIGINT AUTO_INCREMENT | Sim | PK | Identificador do evento |
+| id | BIGINT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador do evento |
 | tipo | VARCHAR(40) | Sim | — | Operação: sincronizacao, competicao, temporada, clubes ou partidas |
 | status | VARCHAR(20) | Sim | — | running, success, partial ou failed |
 | mensagem | VARCHAR(500) | Não | NULL permitido | Resumo seguro do resultado/erro |
-| registros_processados | INT | Sim | DEFAULT 0 | Quantidade de registros tratados |
+| registros_processados | INT UNSIGNED | Sim | DEFAULT 0 | Quantidade de registros tratados |
 | iniciado_em | DATETIME | Sim | UTC | Início da operação |
 | finalizado_em | DATETIME | Não | UTC, NULL enquanto executa | Fim da operação |
-| duracao_ms | INT | Não | NULL permitido | Duração em milissegundos |
+| duracao_ms | INT UNSIGNED | Não | NULL permitido | Duração em milissegundos |
 | detalhes_json | JSON | Não | NULL permitido | Metadados técnicos não sensíveis |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação do log |
 
@@ -323,7 +323,7 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 - `docs/api-recognition/mapeamento-dados.md`: mapeamento football-data.org v4 → MySQL.
 - `docs/api-recognition/contrato-provedores.md`: contrato dos provedores e regras de fixtures/API.
 - PR #35, #36, #38: mapeamento de API, interfaces e schema/seed inicial.
-- PR #39: revisão do seed (em 17/11/2026 ainda não integrado; verificar status antes de aplicar schema).
+- PR #39: seed sem dados esportivos fixos (integrado à main em 18/11/2026).
 - Issues #1, #3, #4, #7, #8, #11, #12, #13, #18, #19, #20, #40 e #41.
 
 ---
