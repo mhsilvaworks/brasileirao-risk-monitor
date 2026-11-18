@@ -171,7 +171,7 @@ Exemplo válido de `probabilidades_posicoes`:
 
 ---
 
-### 3.6 `partidas` [ALTERADO — tipos de gols corrigidos para SMALLINT]
+### 3.6 `partidas` [ALTERADO — tipos de gols mantidos como INT para compatibilidade]
 
 Partidas da temporada, incluindo jogos agendados, em andamento e finalizados.
 
