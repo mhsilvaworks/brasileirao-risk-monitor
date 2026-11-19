@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.env.*
+vendor/
+tests/
+phpunit.xml
+docs/
+*.log
+.DS_Store
