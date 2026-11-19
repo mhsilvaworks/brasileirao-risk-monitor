@@ -82,4 +82,39 @@ final class DatabaseTest extends TestCase
             }
         }
     }
+
+    public function testDoesNotExposeCredentialsWhenConnectionFails(): void
+    {
+        $variables = [
+            'DB_HOST' => '127.0.0.1',
+            'DB_PORT' => '1',
+            'DB_DATABASE' => 'brasileirao_risco',
+            'DB_USERNAME' => 'arena_app',
+            'DB_PASSWORD' => 'senha_teste_nao_exibir',
+        ];
+
+        $originalValues = [];
+
+        foreach ($variables as $name => $value) {
+            $originalValues[$name] = getenv($name);
+            putenv("$name=$value");
+        }
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage(
+                'Não foi possível estabelecer conexão com o banco de dados.'
+            );
+
+            new Database();
+        } finally {
+            foreach ($originalValues as $name => $value) {
+                if ($value === false) {
+                    putenv($name);
+                } else {
+                    putenv("$name=$value");
+                }
+            }
+        }
+    }
 }
