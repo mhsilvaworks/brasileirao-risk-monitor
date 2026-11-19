@@ -1,5 +1,42 @@
 # Monitor de Risco Brasileirão (Série A)
 
+## Build e execução isolada da imagem Docker
+
+Para construir somente a imagem PHP 8.3 com Apache, sem iniciar o MySQL:
+
+```bash
+docker build -t brasileirao-risk-monitor:latest .
+```
+
+Para executar um container a partir da imagem:
+
+```bash
+docker run -d \
+  --name brasileirao-risk-monitor \
+  -p 8083:80 \
+  brasileirao-risk-monitor:latest
+```
+
+Para verificar o estado do container:
+
+```bash
+docker ps
+```
+
+Para consultar os logs:
+
+```bash
+docker logs brasileirao-risk-monitor
+```
+
+Para parar e remover o container:
+
+```bash
+docker rm -f brasileirao-risk-monitor
+```
+
+**Observação:** a execução isolada disponibiliza apenas o serviço PHP/Apache. Para iniciar também o MySQL e configurar as variáveis de ambiente necessárias, utilize o Docker Compose, conforme as instruções desta seção.
+
 ## Ambiente local com Docker Compose
 
 ### Pré-requisitos
