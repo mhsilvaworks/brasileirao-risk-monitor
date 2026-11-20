@@ -1,9 +1,9 @@
 # Dicionário de Dados — ARENA_ Monitor de Risco Brasileirão (Série A)
 
-**Versão do padrão:** 2.0  
-**Referência funcional:** `docs/documentacao_projeto_arena.md` v2.1  
-**Arquitetura:** MVP Final  
-**Stack:** PHP 8.3, MySQL 8, PDO, football-data.org v4  
+**Versão do padrão:** 2.0
+**Referência funcional:** `docs/documentacao_projeto_arena.md` v2.1
+**Arquitetura:** MVP Final
+**Stack:** PHP 8.3, MySQL 8, PDO, football-data.org v4
 **Objetivo:** definir um contrato único para banco, serviços, repositórios, sincronização, cálculos e interface.
 
 > Este documento foi reconciliado com a especificação v2.1 no contexto da **Issue #1**. As seções alteradas em relação ao dicionário v1.0 estão marcadas com `[ALTERADO]` ou `[NOVO]`. Decisões técnicas que divergem do texto do documento v2.1 estão registradas na seção 10.
@@ -357,7 +357,7 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 - Reexecutar `schema.sql` não atualiza a definição de tabelas já existentes; por isso, não substitui a migração.
 - Executar primeiro em uma cópia de desenvolvimento e validar FKs, colunas e contagens antes de aplicar em ambiente com dados reais.
 
---- 
+---
 
 ## 9. Fora do modelo obrigatório do MVP
 
