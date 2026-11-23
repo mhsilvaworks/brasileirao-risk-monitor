@@ -97,9 +97,9 @@ class StandingsServiceTest extends TestCase
     $this->assertSame(1, $tabela[$clubeB]['gols_pro']);
 
     $this->assertLessThan($clubeB, $clubeA);
-}
-public function testIgnoraPartidasComStatusNaoOficialOuPlacarNulo(): void
-{
+    }
+    public function testIgnoraPartidasComStatusNaoOficialOuPlacarNulo(): void
+    {
     $clubes = [
         ['id' => 1, 'nome' => 'Clube A', 'nome_curto' => 'Clube A', 'sigla' => 'CLA'],
         ['id' => 2, 'nome' => 'Clube B', 'nome_curto' => 'Clube B', 'sigla' => 'CLB'],
@@ -143,6 +143,6 @@ public function testIgnoraPartidasComStatusNaoOficialOuPlacarNulo(): void
         $this->assertSame(0, $clube['pontos']);
         $this->assertSame(0, $clube['gols_pro']);
         $this->assertSame(0, $clube['gols_contra']);
-    }
         }
+    }
 }
