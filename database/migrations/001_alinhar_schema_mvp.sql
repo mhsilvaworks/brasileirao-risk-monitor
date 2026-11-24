@@ -227,22 +227,54 @@ JOIN INFORMATION_SCHEMA.TABLES t
 LEFT JOIN INFORMATION_SCHEMA.COLUMNS c
   ON c.TABLE_SCHEMA=t.TABLE_SCHEMA AND c.TABLE_NAME=t.TABLE_NAME AND c.COLUMN_NAME=e.column_name
 WHERE c.COLUMN_NAME IS NULL OR c.COLUMN_TYPE<>e.column_type OR c.IS_NULLABLE<>e.nullable
-   OR (e.idx='PRI' AND NOT EXISTS (
-       SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-       WHERE s.TABLE_SCHEMA=DATABASE() AND s.TABLE_NAME=e.table_name
-         AND s.INDEX_NAME='PRIMARY' AND s.COLUMN_NAME=e.column_name AND s.SEQ_IN_INDEX=1
-   ))
+   OR (e.idx='PRI' AND (
+    NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE s.TABLE_SCHEMA = DATABASE()
+          AND s.TABLE_NAME = e.table_name
+          AND s.INDEX_NAME = 'PRIMARY'
+          AND s.COLUMN_NAME = e.column_name
+          AND s.SEQ_IN_INDEX = 1
+    )
+    OR (
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.STATISTICS s
+        WHERE s.TABLE_SCHEMA = DATABASE()
+          AND s.TABLE_NAME = e.table_name
+          AND s.INDEX_NAME = 'PRIMARY'
+    ) <> 1
+    ))
 UNION ALL
 SELECT 'Tabela preexistente deve usar InnoDB: usuarios/simulacoes_usuarios/sync_logs'
 FROM INFORMATION_SCHEMA.TABLES t
 WHERE t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME IN ('usuarios','simulacoes_usuarios','sync_logs')
   AND (t.TABLE_TYPE<>'BASE TABLE' OR COALESCE(t.ENGINE,'')<>'InnoDB')
 UNION ALL
-SELECT 'usuarios.email precisa de índice UNIQUE'
-WHERE EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios')
-  AND NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS s
-                  WHERE s.TABLE_SCHEMA=DATABASE() AND s.TABLE_NAME='usuarios'
-                    AND s.COLUMN_NAME='email' AND s.SEQ_IN_INDEX=1 AND s.NON_UNIQUE=0)
+SELECT 'usuarios.email precisa de índice UNIQUE exclusivamente na coluna email'
+WHERE EXISTS (
+    SELECT 1
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'usuarios'
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM INFORMATION_SCHEMA.STATISTICS s
+    WHERE s.TABLE_SCHEMA = DATABASE()
+      AND s.TABLE_NAME = 'usuarios'
+      AND s.NON_UNIQUE = 0
+      AND s.COLUMN_NAME = 'email'
+      AND s.SEQ_IN_INDEX = 1
+      AND s.SUB_PART IS NULL
+      AND (
+          SELECT COUNT(*)
+          FROM INFORMATION_SCHEMA.STATISTICS s2
+          WHERE s2.TABLE_SCHEMA = s.TABLE_SCHEMA
+            AND s2.TABLE_NAME = s.TABLE_NAME
+            AND s2.INDEX_NAME = s.INDEX_NAME
+      ) = 1
+)
 UNION ALL
 SELECT CONCAT('Coluna id precisa de AUTO_INCREMENT: ', e.table_name, '.id')
 FROM (SELECT 'usuarios' table_name UNION ALL SELECT 'simulacoes_usuarios' UNION ALL SELECT 'sync_logs') e
@@ -250,21 +282,63 @@ JOIN INFORMATION_SCHEMA.COLUMNS c
   ON c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=e.table_name AND c.COLUMN_NAME='id'
 WHERE c.EXTRA NOT LIKE '%auto_increment%'
 UNION ALL
-SELECT CONCAT('Default/atributo incompatível: ', e.table_name, '.', e.column_name)
+SELECT CONCAT(
+    'Default/atributo incompatível: ',
+    e.table_name,
+    '.',
+    e.column_name
+)
 FROM (
-    SELECT 'usuarios' table_name,'criado_em' column_name,'CURRENT_TIMESTAMP' expected_default,' ' expected_extra
-    UNION ALL SELECT 'usuarios','atualizado_em','CURRENT_TIMESTAMP','on update CURRENT_TIMESTAMP'
-    UNION ALL SELECT 'simulacoes_usuarios','criado_em','CURRENT_TIMESTAMP',' '
-    UNION ALL SELECT 'sync_logs','registros_processados','0',' '
-    UNION ALL SELECT 'sync_logs','criado_em','CURRENT_TIMESTAMP',' '
+    SELECT 'usuarios' table_name, 'nome' column_name, '__NONE__' expected_default, 'NO' expected_on_update
+    UNION ALL SELECT 'usuarios','email','__NONE__','NO'
+    UNION ALL SELECT 'usuarios','senha_hash','__NONE__','NO'
+    UNION ALL SELECT 'usuarios','clube_favorito_id','__NULL__','NO'
+    UNION ALL SELECT 'usuarios','criado_em','CURRENT_TIMESTAMP','NO'
+    UNION ALL SELECT 'usuarios','atualizado_em','CURRENT_TIMESTAMP','YES'
+
+    UNION ALL SELECT 'simulacoes_usuarios','usuario_id','__NONE__','NO'
+    UNION ALL SELECT 'simulacoes_usuarios','clube_id','__NONE__','NO'
+    UNION ALL SELECT 'simulacoes_usuarios','posicao_alvo','__NONE__','NO'
+    UNION ALL SELECT 'simulacoes_usuarios','cenarios_json','__NONE__','NO'
+    UNION ALL SELECT 'simulacoes_usuarios','criado_em','CURRENT_TIMESTAMP','NO'
+
+    UNION ALL SELECT 'sync_logs','tipo','__NONE__','NO'
+    UNION ALL SELECT 'sync_logs','status','__NONE__','NO'
+    UNION ALL SELECT 'sync_logs','mensagem','__NULL__','NO'
+    UNION ALL SELECT 'sync_logs','registros_processados','0','NO'
+    UNION ALL SELECT 'sync_logs','iniciado_em','__NONE__','NO'
+    UNION ALL SELECT 'sync_logs','finalizado_em','__NULL__','NO'
+    UNION ALL SELECT 'sync_logs','duracao_ms','__NULL__','NO'
+    UNION ALL SELECT 'sync_logs','detalhes_json','__NULL__','NO'
+    UNION ALL SELECT 'sync_logs','criado_em','CURRENT_TIMESTAMP','NO'
 ) e
 JOIN INFORMATION_SCHEMA.COLUMNS c
-  ON c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=e.table_name AND c.COLUMN_NAME=e.column_name
-WHERE (e.table_name='usuarios' OR e.table_name='simulacoes_usuarios' OR e.table_name='sync_logs')
-  AND EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t
-              WHERE t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME=e.table_name)
-  AND (UPPER(COALESCE(c.COLUMN_DEFAULT,''))<>e.expected_default
-       OR (e.expected_extra<>' ' AND LOWER(c.EXTRA) NOT LIKE CONCAT('%',e.expected_extra,'%')))
+  ON c.TABLE_SCHEMA = DATABASE()
+ AND c.TABLE_NAME = e.table_name
+ AND c.COLUMN_NAME = e.column_name
+WHERE
+    (
+        e.expected_default IN ('__NONE__', '__NULL__')
+        AND c.COLUMN_DEFAULT IS NOT NULL
+    )
+    OR (
+        e.expected_default NOT IN ('__NONE__', '__NULL__')
+        AND UPPER(
+            REPLACE(
+                COALESCE(c.COLUMN_DEFAULT, ''),
+                '()',
+                ''
+            )
+        ) <> e.expected_default
+    )
+    OR (
+        e.expected_on_update = 'YES'
+        AND LOWER(c.EXTRA) NOT LIKE '%on update current_timestamp%'
+    )
+    OR (
+        e.expected_on_update = 'NO'
+        AND LOWER(c.EXTRA) LIKE '%on update current_timestamp%'
+    )
 UNION ALL
 SELECT 'FK usuarios.clube_favorito_id -> clubes.id precisa de ON DELETE SET NULL'
 WHERE EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='usuarios')

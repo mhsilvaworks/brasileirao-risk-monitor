@@ -1,3 +1,4 @@
+#### Validações estruturais das tabelas novas
 # Dicionário de Dados — ARENA_ Monitor de Risco Brasileirão (Série A)
 
 **Versão do padrão:** 2.1
@@ -438,6 +439,22 @@ Uma coluna preexistente incompatível bloqueia a migration antes de qualquer alt
 Cria `usuarios`, `simulacoes_usuarios` e `sync_logs` via `CREATE TABLE IF NOT EXISTS` quando estiverem ausentes. Se uma delas já existir, o preflight compara a estrutura contratual antes de permitir que a migration continue.
 
 Uma tabela preexistente incompatível reprova o preflight e não é alterada automaticamente. `CREATE TABLE IF NOT EXISTS` não é usado como mecanismo de atualização.
+#### Validações estruturais das tabelas novas
+
+Além da existência das colunas, o preflight deve verificar se as estruturas das tabelas `usuarios`, `simulacoes_usuarios` e `sync_logs` correspondem integralmente ao contrato definido em `database/schema.sql`.
+
+As verificações incluem:
+
+- **Chaves primárias:** devem ser simples, compostas exclusivamente pela coluna `id` de cada tabela.
+- **Índice de email:** `usuarios.email` deve possuir um índice `UNIQUE` composto exclusivamente por essa coluna. Um índice composto que apenas comece por `email` não atende ao contrato.
+- **AUTO_INCREMENT:** as colunas `id` das três tabelas devem manter esse atributo.
+- **Valores padrão:** devem corresponder à definição do schema, incluindo `CURRENT_TIMESTAMP` nos campos de criação, `ON UPDATE CURRENT_TIMESTAMP` em `usuarios.atualizado_em` e valor padrão `0` em `sync_logs.registros_processados`.
+- **Ausência de default:** `sync_logs.iniciado_em` deve permanecer sem valor padrão, pois representa o início explícito da operação.
+- **Nulabilidade:** os campos obrigatórios e opcionais devem respeitar as definições de `NOT NULL` e `NULL` do schema.
+
+O preflight deve rejeitar estruturas incompatíveis antes da execução dos DDLs. Não deve tentar corrigir automaticamente índices, chaves, defaults ou atributos divergentes.
+
+**Limite da verificação:** a comparação deve considerar os metadados disponibilizados pelo MySQL em `INFORMATION_SCHEMA`. Quando o MySQL representar de forma equivalente a ausência de default e `DEFAULT NULL` para uma coluna nullable, essa diferença textual não deve ser tratada isoladamente como incompatibilidade.
 
 ### O que a migration faz (Bloco 3)
 

@@ -814,4 +814,101 @@ final class SchemaContractTest extends TestCase
             'O dicionário deve documentar que o cliente mysql batch interrompe no erro'
         );
     }
+
+    public function testMigrationValidaUniqueEmailComoIndiceDeUmaColuna(): void
+    {
+        $migration = self::readFile(
+            'database/migrations/001_alinhar_schema_mvp.sql'
+        );
+
+        $this->assertStringContainsString(
+            's.SUB_PART IS NULL',
+            $migration
+        );
+
+        $this->assertStringContainsString(
+            'AND s.NON_UNIQUE = 0',
+            $migration
+        );
+
+        $this->assertStringContainsString(
+            'AND s.COLUMN_NAME = \'email\'',
+            $migration
+        );
+
+        $this->assertStringContainsString(
+            ') = 1',
+            $migration
+        );
+    }
+
+    public function testMigrationRejeitaChavePrimariaComposta(): void
+    {
+        $migration = self::readFile(
+            'database/migrations/001_alinhar_schema_mvp.sql'
+        );
+
+        $this->assertStringContainsString(
+            "s.INDEX_NAME = 'PRIMARY'",
+            $migration
+        );
+
+        $this->assertStringContainsString(
+            ') <> 1',
+            $migration
+        );
+    }
+
+    public function testMigrationValidaDefaultsDasTabelasNovas(): void
+    {
+        $migration = self::readFile(
+            'database/migrations/001_alinhar_schema_mvp.sql'
+        );
+
+        foreach ([
+            'usuarios',
+            'simulacoes_usuarios',
+            'sync_logs',
+            'CURRENT_TIMESTAMP',
+            'registros_processados',
+            'iniciado_em',
+            '__NONE__',
+            '__NULL__',
+        ] as $expected) {
+            $this->assertStringContainsString(
+                $expected,
+                $migration,
+                "A validação de defaults deve contemplar: {$expected}"
+            );
+        }
+    }
+
+    public function testMigrationValidaOnUpdateCurrentTimestamp(): void
+    {
+        $migration = self::readFile(
+            'database/migrations/001_alinhar_schema_mvp.sql'
+        );
+
+        $this->assertStringContainsString(
+            'on update current_timestamp',
+            strtolower($migration)
+        );
+
+        $this->assertStringContainsString(
+            "'atualizado_em'",
+            $migration
+        );
+    }
+
+    public function testMigrationVerificaAusenciaDeDefaultEmIniciadoEm(): void
+    {
+        $migration = self::readFile(
+            'database/migrations/001_alinhar_schema_mvp.sql'
+        );
+
+        $this->assertStringContainsString(
+            "'iniciado_em','__NONE__'",
+            $migration
+        );
+    }
 }
