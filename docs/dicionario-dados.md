@@ -1,12 +1,12 @@
 # Dicionário de Dados — ARENA_ Monitor de Risco Brasileirão (Série A)
 
-**Versão do padrão:** 2.0
+**Versão do padrão:** 2.1
 **Referência funcional:** `docs/documentacao_projeto_arena.md` v2.1
 **Arquitetura:** MVP Final
 **Stack:** PHP 8.3, MySQL 8, PDO, football-data.org v4
 **Objetivo:** definir um contrato único para banco, serviços, repositórios, sincronização, cálculos e interface.
 
-> Este documento foi reconciliado com a especificação v2.1 no contexto da **Issue #1**. As seções alteradas em relação ao dicionário v1.0 estão marcadas com `[ALTERADO]` ou `[NOVO]`. Decisões técnicas que divergem do texto do documento v2.1 estão registradas na seção 10.
+> **Escopo deste documento:** descreve o schema implementado e a migration incremental. Onde o schema difere da DDL ilustrativa da seção 4.2 do documento v2.1, a diferença está registrada na seção 10. As entradas DT-01 a DT-07 descrevem escolhas presentes no código e suas justificativas; a existência dessas escolhas não comprova aprovação formal da equipe. Onde não há evidência de aprovação, a divergência permanece pendente de validação.
 
 ---
 
@@ -21,6 +21,7 @@
 - Valores monetários não fazem parte do MVP. Percentuais são armazenados de 0.00 a 100.00, nunca como fração 0–1.
 - Datas recebidas da API são normalizadas para UTC antes da persistência. Exibição local usa `America/Sao_Paulo`.
 - Campo que pode estar ausente na fonte deve permanecer NULL. Não converter ausência em zero, string vazia ou data inventada.
+- **Ressalva pendente:** `partidas.data_hora_utc` está `NOT NULL`; ainda não há evidência suficiente aqui para afirmar que a fonte sempre fornece esse valor. Não inferir que a regra geral está atendida: validar contrato e mapeamento antes de alterar o schema.
 - Não usar `ENUM` para status externos: a API pode introduzir novos estados. Usar VARCHAR e tratar estados desconhecidos de forma segura.
 - SQL somente em Repositories/infraestrutura; páginas PHP não devem conter consultas SQL.
 - Toda escrita externa deve ser parametrizada com PDO; nunca concatenar valores recebidos do usuário/API em SQL.
@@ -28,7 +29,7 @@
 
 ---
 
-## 2. Modelo relacional oficial [ALTERADO]
+## 2. Modelo relacional
 
 ```text
 competicoes 1 ─── N temporadas
@@ -46,7 +47,7 @@ clubes      1 ─── N simulacoes_usuarios
 
 `clubes`, `temporadas`, `clubes_temporadas`, `partidas`, `usuarios`, `simulacoes_usuarios`, `sync_logs`
 
-### Tabela de suporte à integração (decisão técnica DT-01)
+### Tabela de suporte à integração (decisão técnica DT-01, não listada como tabela do MVP)
 
 `competicoes` — mantida como suporte à FK de `temporadas.competicao_id`. Ver seção 10.
 
@@ -54,9 +55,9 @@ clubes      1 ─── N simulacoes_usuarios
 
 ## 3. Dicionário por tabela
 
-### 3.1 `competicoes` [ALTERADO — status: suporte à integração, não tabela do MVP]
+### 3.1 `competicoes` — suporte à integração (DT-01)
 
-> **Decisão técnica DT-01:** mantida como tabela auxiliar de normalização para resolver `temporadas.competicao_id`. Não é uma das 7 tabelas do MVP, mas é necessária para a integridade referencial enquanto `temporadas` mantiver a FK. Ver seção 10.
+> Não é uma das 7 tabelas do MVP, mas é necessária para a integridade referencial enquanto `temporadas.competicao_id` mantiver a FK. A remoção futura exige converter `competicao_id` para coluna plain INT (sem FK) ou eliminá-la.
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
@@ -79,7 +80,7 @@ clubes      1 ─── N simulacoes_usuarios
 |---|---|---|---|---|
 | id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
 | external_id | INT NOT NULL | Sim | UNIQUE | ID da temporada na API |
-| competicao_id | INT | Sim | FK → competicoes.id | Competição à qual pertence |
+| competicao_id | INT NOT NULL | Sim | FK → competicoes.id | Competição à qual pertence |
 | ano | INT | Sim | — | Ano da temporada |
 | data_inicio | DATE | Sim | — | Início da temporada |
 | data_fim | DATE | Sim | — | Fim previsto/registrado |
@@ -113,7 +114,7 @@ clubes      1 ─── N simulacoes_usuarios
 
 ---
 
-### 3.4 `usuarios` [NOVO — ausente no schema anterior; obrigatória conforme v2.1]
+### 3.4 `usuarios`
 
 Contas do portal. Senhas nunca são armazenadas em texto puro.
 
@@ -127,17 +128,17 @@ Contas do portal. Senhas nunca são armazenadas em texto puro.
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Cadastro |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Última alteração |
 
-**Regras:** normalizar email (trim e lowercase) antes de persistir; autenticar com `password_verify()`; atualizar hash com `password_needs_rehash()` quando aplicável. Nunca registrar senha ou hash em logs. Clube favorito pode ser NULL (DT-05).
+**Regras:** normalizar email (trim e lowercase) antes de persistir; autenticar com `password_verify()`; atualizar hash com `password_needs_rehash()` quando aplicável. Nunca registrar senha ou hash em logs.
 
 **Índices/FKs:** `UNIQUE(email)`; FK `clube_favorito_id → clubes.id ON DELETE SET NULL`.
 
 ---
 
-### 3.5 `clubes_temporadas` [ALTERADO — adiciona colunas de probabilidade]
+### 3.5 `clubes_temporadas` — sem estatísticas de partida (DT-03)
 
 Tabela associativa: participação de um clube em uma temporada, ajustes administrativos e resultados probabilísticos do motor PHP.
 
-> **Decisão técnica DT-03:** NÃO inclui colunas de estatística de partida (pontos, jogos, vitórias, etc.) que constam na DDL ilustrativa da seção 4.2 do documento v2.1. A classificação é calculada dinamicamente a partir da tabela `partidas` pelo `StandingsService`, evitando redundância e risco de dessincronização.
+> **DT-03:** NÃO inclui colunas de estatística de partida (pontos, jogos, vitórias, etc.) presentes na DDL ilustrativa da seção 4.2 do documento v2.1. A classificação é calculada dinamicamente a partir de `partidas` pelo `StandingsService`.
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
@@ -151,29 +152,19 @@ Tabela associativa: participação de um clube em uma temporada, ajustes adminis
 | probabilidade_sulamericana | DECIMAL(5,2) | Não | 0.00–100.00 | Probabilidade estimada de vaga na Sul-Americana |
 | probabilidade_rebaixamento | DECIMAL(5,2) | Não | 0.00–100.00 | Probabilidade estimada de rebaixamento |
 | probabilidades_posicoes | JSON | Não | NULL permitido | Distribuição das posições finais 1º a 20º |
-| probabilidades_calculadas_em | DATETIME | Não | UTC | Momento do cálculo probabilístico |
+| probabilidades_calculadas_em | DATETIME | Não | UTC, NULL se não calculadas | Momento do cálculo probabilístico |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Alteração local |
 
+> **Nome canônico (DT-06):** a coluna de timestamp de probabilidades é `probabilidades_calculadas_em`. SQL executável deve usar esse nome; menções ao nome antigo em comentários explicativos são históricas. Ver seção 10.
+
 **Chave única:** `UNIQUE(temporada_id, clube_id)`.
-
-**Regras:** `ajuste_pontos` pode ser positivo ou negativo. Probabilidades entre 0 e 100; NULL significa não calculado. JSON de posições deve ter chaves `"1"` a `"20"` com valores percentuais cuja soma por clube seja aproximadamente 100%.
-
-Exemplo válido de `probabilidades_posicoes`:
-```json
-{"1": 5.00, "2": 5.00, "3": 5.00, "4": 5.00, "5": 5.00,
- "6": 5.00, "7": 5.00, "8": 5.00, "9": 5.00, "10": 5.00,
- "11": 5.00, "12": 5.00, "13": 5.00, "14": 5.00, "15": 5.00,
- "16": 5.00, "17": 5.00, "18": 5.00, "19": 5.00, "20": 5.00}
-```
 
 **Índices/FKs:** `UNIQUE(temporada_id, clube_id)`; FKs de temporada e clube com `ON DELETE CASCADE`.
 
 ---
 
-### 3.6 `partidas` [ALTERADO — tipos de gols mantidos como INT para compatibilidade]
-
-Partidas da temporada, incluindo jogos agendados, em andamento e finalizados.
+### 3.6 `partidas` — status como VARCHAR(30) (DT-04)
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
@@ -194,37 +185,26 @@ Partidas da temporada, incluindo jogos agendados, em andamento e finalizados.
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Alteração local |
 
-**Regras de status:** `VARCHAR(30)`, não ENUM. Estados conhecidos: `FINISHED`, `AWARDED`, `IN_PLAY`, `PAUSED`, `SCHEDULED`, `TIMED`, `SUSPENDED`, `POSTPONED`, `CANCELLED`. Estados desconhecidos devem ser persistidos sem causar erro.
-
 **Regras de placar:** `NULL` significa resultado indisponível. Nunca transformar em `0 × 0`. Somente `FINISHED`/`AWARDED` com placares válidos alimentam a classificação.
 
-**Índices/FKs:** `UNIQUE(external_id)`; `INDEX(temporada_id, rodada)`; `INDEX(status)`; FKs de temporada, mandante e visitante.
+**Índices/FKs:** `UNIQUE(external_id)`; `INDEX(temporada_id, rodada)`; `INDEX(status)`; FKs de temporada, mandante e visitante com ON DELETE CASCADE.
 
 ---
 
-### 3.7 `simulacoes_usuarios` [NOVO — obrigatória conforme especificação v2.1]
+### 3.7 `simulacoes_usuarios`
 
-Armazena os conjuntos de 3 cenários hipotéticos gerados pelo JavaScript e salvos pelo usuário no perfil.
+Armazena os conjuntos de 3 cenários hipotéticos gerados pelo JavaScript e salvos pelo usuário.
 
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
 | id | INT AUTO_INCREMENT | Sim | PK | Identificador interno |
-| usuario_id | INT | Sim | FK → usuarios.id | Usuário que salvou |
-| clube_id | INT | Sim | FK → clubes.id | Clube do cenário |
+| usuario_id | INT | Sim | FK → usuarios.id ON DELETE CASCADE | Usuário que salvou |
+| clube_id | INT | Sim | FK → clubes.id ON DELETE CASCADE | Clube do cenário |
 | posicao_alvo | TINYINT UNSIGNED | Sim | 1–20 | Posição final desejada |
 | cenarios_json | JSON NOT NULL | Sim | — | Os 3 cenários hipotéticos gerados pelo JS |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Momento do salvamento |
 
-**Regras:** `ON DELETE CASCADE` em `usuario_id` garante que a exclusão do usuário remova todos os seus cenários (RN05). JSON deve conter exatamente 3 cenários estruturados; validação na camada de serviço antes da persistência.
-
-Exemplo válido de `cenarios_json`:
-```json
-[
-  {"id": 1, "tipo": "Regular", "descricao": "Vitórias simples em casa", "resultados": []},
-  {"id": 2, "tipo": "Confrontos Diretos", "descricao": "Foco nos jogos de 6 pontos", "resultados": []},
-  {"id": 3, "tipo": "Arrancada", "descricao": "Vitórias com saldo de gols", "resultados": []}
-]
-```
+**Regras:** `ON DELETE CASCADE` em `usuario_id` garante que a exclusão do usuário remova todos os seus cenários (RN05). JSON deve conter exatamente 3 cenários estruturados; validação na camada de serviço.
 
 **Índices/FKs:** `INDEX(usuario_id)`; `INDEX(clube_id)`; FK `usuario_id → usuarios.id ON DELETE CASCADE`; FK `clube_id → clubes.id ON DELETE CASCADE`.
 
@@ -237,7 +217,7 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 | Campo | Tipo MySQL | Obrigatório | Chave/regra | Descrição |
 |---|---|---|---|---|
 | id | BIGINT UNSIGNED AUTO_INCREMENT | Sim | PK | Identificador do evento |
-| tipo | VARCHAR(40) | Sim | — | Operação: sincronizacao, competicao, temporada, clubes ou partidas |
+| tipo | VARCHAR(40) | Sim | — | sincronizacao, competicao, temporada, clubes ou partidas |
 | status | VARCHAR(20) | Sim | — | running, success, partial ou failed |
 | mensagem | VARCHAR(500) | Não | NULL permitido | Resumo seguro do resultado/erro |
 | registros_processados | INT UNSIGNED | Sim | DEFAULT 0 | Quantidade de registros tratados |
@@ -246,8 +226,6 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 | duracao_ms | INT UNSIGNED | Não | NULL permitido | Duração em milissegundos |
 | detalhes_json | JSON | Não | NULL permitido | Metadados técnicos não sensíveis |
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação do log |
-
-**Regras:** registrar início, sucesso, falha e execução parcial. Nunca incluir token, senha, cabeçalhos de autenticação, dados pessoais ou corpo integral de resposta externa.
 
 ---
 
@@ -267,8 +245,8 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 12. A distribuição de posições contém 20 chaves (1–20); percentuais por clube somam aproximadamente 100%.
 13. Erros de API, timeout, HTTP 429 e JSON inválido não devem apagar nem zerar dados válidos.
 14. IDs internos nunca são confundidos com IDs externos da API.
-15. **[NOVO]** Exclusão de usuário remove em cascata todos os registros em `simulacoes_usuarios` (RN05).
-16. **[NOVO]** `cenarios_json` deve conter exatamente 3 cenários; validar no serviço antes de persistir.
+15. Exclusão de usuário remove em cascata todos os registros em `simulacoes_usuarios` (RN05).
+16. `cenarios_json` deve conter exatamente 3 cenários; validar no serviço antes de persistir.
 
 ---
 
@@ -279,38 +257,19 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 - `ClubeRepository::findByExternalId(int $externalId): ?array`
 - `ClubeRepository::upsert(array $clube): void`
 - `ClubeRepository::findById(int $id): ?array`
-- `ClubeRepository::findBySeason(int $temporadaId): array`
+- `ClubeRepository::findByTemporada(int $temporadaId): array` — retorna `probabilidades_calculadas_em`
 - `UsuarioRepository::findByEmail(string $email): ?array`
-- `UsuarioRepository::findById(int $id): ?array`
 - `UsuarioRepository::create(array $usuario): int`
 - `UsuarioRepository::updateProfile(int $id, array $dados): bool`
-- `UsuarioRepository::updatePasswordHash(int $id, string $hash): bool`
 - `UsuarioRepository::delete(int $id): bool`
 - `PartidaRepository::upsert(array $partida): void`
 - `PartidaRepository::findFinishedBySeason(int $temporadaId): array`
-- `PartidaRepository::findLiveByClub(int $clubeId): array`
-- `TemporadaRepository::upsert(array $temporada): void`
-- `CompeticaoRepository::upsert(array $competicao): void`
+- `SimulacaoRepository::findByUsuario(int $usuarioId): array`
+- `SimulacaoRepository::create(array $simulacao): int`
+- `SimulacaoRepository::delete(int $id, int $usuarioId): bool`
 - `SyncLogRepository::create(array $log): int`
 - `SyncLogRepository::finish(int $id, array $resultado): void`
 - `ClubeTemporadaRepository::upsertProbabilities(int $temporadaId, int $clubeId, array $probabilidades): void`
-- **[NOVO]** `SimulacaoRepository::findByUsuario(int $usuarioId): array`
-- **[NOVO]** `SimulacaoRepository::create(array $simulacao): int`
-- **[NOVO]** `SimulacaoRepository::delete(int $id, int $usuarioId): bool`
-
-### Services / infraestrutura
-- `SyncService::syncCompetition(): array`
-- `SyncService::syncSeason(int $seasonExternalId): array`
-- `SyncService::syncClubs(int $seasonExternalId): array`
-- `SyncService::syncMatches(int $seasonExternalId): array`
-- `SyncService::syncAll(): array`
-- `StandingsService::calculate(int $temporadaId): array`
-- `ProbabilidadeService::calculateSeason(int $temporadaId): array`
-- `MonteCarloSimulator::simulate(int $iterations = 2000): array`
-- `Logger::info(string $message, array $context = []): void`
-- `Logger::warning(string $message, array $context = []): void`
-- `Logger::error(string $message, array $context = []): void`
-- `SessionGuard::requireAuth(): void`
 
 ---
 
@@ -318,64 +277,222 @@ Auditoria operacional das execuções de sincronização. Não guardar tokens ne
 
 - `docs/documentacao_projeto_arena.md` v2.1: **referência funcional aprovada**.
 - `database/schema.sql`: estrutura completa para banco novo.
-- `database/migrations/001_alinhar_schema_mvp.sql`: migração incremental, repetível e não destrutiva para bancos existentes.
-- `database/seed.sql`: dados de inicialização; verificar coerência com PR #39.
+- `database/migrations/001_alinhar_schema_mvp.sql`: migração incremental para bancos existentes.
 - `docs/api-recognition/mapeamento-dados.md`: mapeamento football-data.org v4 → MySQL.
-- `docs/api-recognition/contrato-provedores.md`: contrato dos provedores e regras de fixtures/API.
-- PR #35, #36, #38: mapeamento de API, interfaces e schema/seed inicial.
-- PR #39: seed sem dados esportivos fixos (integrado à main em 18/11/2026).
-- Issues #1, #3, #4, #7, #8, #11, #12, #13, #18, #19, #20, #40 e #41.
+- PR #35, #36, #38, #39: histórico de schema/seed/mapeamento.
 
 ---
 
-## 7. Testes mínimos de contrato [ALTERADO]
+## 7. Testes: escopo e limites
 
-- Chaves externas repetidas atualizam o registro existente (idempotência).
-- Siglas duplicadas são aceitas (ex.: dois clubes com `COR`).
-- IDs externos não são confundidos com IDs internos.
-- Campos opcionais permanecem NULL quando ausentes.
-- Status desconhecido pode ser persistido sem quebrar a aplicação.
-- Partidas ao vivo/adiadas/canceladas não entram na classificação final.
-- `FINISHED`/`AWARDED` com placares válidos entram na classificação.
-- Probabilidades fora de 0–100 são rejeitadas/normalizadas pelo serviço.
-- JSON de posições possui chaves `"1"`–`"20"` e soma aproximada de 100%.
-- Falha HTTP/429/timeout mantém os dados reais já persistidos.
-- Logs não contêm token, senha, hash ou cookie.
-- Usuário é autenticado por hash e não acessa dados de outra conta.
-- **[NOVO]** Exclusão de usuário remove em cascata todos os registros em `simulacoes_usuarios`.
-- **[NOVO]** `simulacoes_usuarios.cenarios_json` armazena exatamente 3 cenários estruturados.
-- **[NOVO]** Schema de banco novo e migração incremental de banco existente são executados separadamente e sem apagar dados.
+### O que os testes estáticos em `SchemaContractTest.php` cobrem
+
+São testes de **contrato textual** — verificam o conteúdo dos arquivos `.sql`, `.php` e `.md` como texto, sem executar SQL nem conectar ao banco. Cobrem:
+- Nome canônico `probabilidades_calculadas_em` em todos os arquivos afetados.
+- Presença das 7 tabelas obrigatórias do MVP e da tabela auxiliar no schema.
+- Nome do banco (`brasileirao_risco`).
+- `VARCHAR(30)` para `status` em partidas (não ENUM).
+- ON DELETE CASCADE em `simulacoes_usuarios`.
+- Uso de `INFORMATION_SCHEMA` e `REFERENTIAL_CONSTRAINTS` + `KEY_COLUMN_USAGE` na migration.
+- Pré-condições e limitações declaradas no cabeçalho da migration.
+- Versão e decisões técnicas do dicionário.
+- Uso de prepared statements no repositório.
+
+### O que os testes estáticos NÃO cobrem
+
+- Que a migration execute sem erro em um banco real.
+- Que a migration preserve dados existentes.
+- Que `CREATE TABLE IF NOT EXISTS` produza exatamente a estrutura esperada.
+- Que a verificação de FK funcione corretamente em MySQL 8 com dados reais.
+- Que `findByTemporada()` retorne a coluna correta de um banco real.
+- Que o preflight ou o SQL dinâmico interrompa a execução; isso requer MySQL real.
+
+### Teste de integração MySQL 8.0.46 — histórico da revisão anterior
+
+Os resultados abaixo registram os testes da revisão anterior à versão 1.2. Os cenários de coluna incompatível, tabela `usuarios` divergente e temporada órfã expuseram falsos sucessos/aplicação parcial e motivaram o preflight fail-fast documentado a seguir. Não representam o comportamento da versão 1.2.
+
+O fluxo histórico e os cenários B–F foram executados em 24/11/2026 usando containers descartáveis sem rede, portas publicadas ou mounts; `/var/lib/mysql` ficou em `tmpfs`. A versão do servidor foi confirmada com `SELECT VERSION()` como `8.0.46`. O banco principal do container foi criado pelo próprio `database/schema.sql` histórico e ficou com `utf8mb4_unicode_ci`. Nenhum container, volume ou banco do Compose do projeto foi usado.
+
+No banco histórico limpo, o estado inicial foi 1 competição, 1 temporada, 20 clubes, 20 vínculos, 0 partidas e 0 temporadas órfãs. A FK era `CASCADE`/`NO ACTION`. A primeira execução da versão atual terminou com código 0 e diagnóstico `OK`; a segunda execução também terminou com código 0 e `OK`. Em ambas as execuções, seis colunas, três tabelas e uma FK equivalente permaneceram presentes, com `DELETE_RULE=RESTRICT` e `UPDATE_RULE=RESTRICT`.
+
+Para verificar preservação, serializei em JSON e ordenei 42 linhas das cinco tabelas históricas, incluindo seus IDs e todos os campos existentes no PR #38. `diff -u` antes/depois não encontrou diferenças na primeira nem na segunda execução. O SHA-256 das três capturas foi idêntico: `691d4fa82ed4a1c5dbd986c312b48145db9ed0adef239fb59c370df09018fdb6`.
+
+Os resultados adicionais estão registrados abaixo. Diagnóstico textual `ERRO` com exit code 0 é comportamento observado: é necessário validar o status retornado, não apenas o código do cliente.
+
+```bash
+# Execute o bloco em um shell próprio; erro interrompe o roteiro.
+set -euo pipefail
+
+# 1. Gerar um identificador único para esta execução e confirmar explicitamente
+#    que o banco ainda não existe. Se existir, pare e gere outro nome; não reutilize
+#    nem apague banco existente.
+TEST_DB="arena_migration_test_issue1_$(date -u +%Y%m%d_%H%M%S)_$$"
+EXISTING_DB="$(mysql -N -B -u root -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='${TEST_DB}';")"
+if [[ -n "${EXISTING_DB}" ]]; then
+  echo "ERRO: ${TEST_DB} já existe; escolha outro identificador."
+  exit 1
+fi
+mysql -u root -e "CREATE DATABASE ${TEST_DB} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+git show e650e75:database/schema.sql | sed "s/brasileirao_risco/${TEST_DB}/g" | mysql -u root "${TEST_DB}"
+git show e650e75:database/seed.sql | sed "s/brasileirao_risco/${TEST_DB}/g" | mysql -u root "${TEST_DB}"
+
+# 2. Registrar contagens de dados de base e aplicar migration no banco explicitamente selecionado.
+mysql -u root "${TEST_DB}" -e "SELECT (SELECT COUNT(*) FROM competicoes) competicoes, (SELECT COUNT(*) FROM clubes) clubes, (SELECT COUNT(*) FROM temporadas) temporadas, (SELECT COUNT(*) FROM clubes_temporadas) clubes_temporadas, (SELECT COUNT(*) FROM partidas) partidas;"
+mysql -u root "${TEST_DB}" < database/migrations/001_alinhar_schema_mvp.sql
+
+# 3. Validar estado resultante (usar queries do cabeçalho da migration).
+#    A migration não contém USE; o argumento do banco mantém o teste isolado.
+mysql -u root "${TEST_DB}" -e "
+  SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA='${TEST_DB}'
+    AND TABLE_NAME='clubes_temporadas'
+    AND COLUMN_NAME LIKE 'probabilidad%'
+  ORDER BY COLUMN_NAME;"
+# Esperado: 6 linhas
+
+# 4. Reexecutar para testar idempotência e comparar as contagens de dados com o passo 2.
+mysql -u root "${TEST_DB}" < database/migrations/001_alinhar_schema_mvp.sql
+# Esperado: sem erros
+mysql -u root "${TEST_DB}" -e "SELECT (SELECT COUNT(*) FROM competicoes) competicoes, (SELECT COUNT(*) FROM clubes) clubes, (SELECT COUNT(*) FROM temporadas) temporadas, (SELECT COUNT(*) FROM clubes_temporadas) clubes_temporadas, (SELECT COUNT(*) FROM partidas) partidas;"
+
+# 5. Compare as cinco contagens antes/depois. A migration não deve criar,
+#    remover nem duplicar esses registros. A versão anterior imprimia ERRO
+#    sem garantir exit code diferente de zero; a versão 1.2 falha por SQL.
+#    Não remova automaticamente o banco; descarte-o somente por decisão explícita.
+```
+
+### Resultados dos cenários B–F em MySQL 8.0.46
+
+Cada cenário usou um schema descartável independente, carregado do schema e seed históricos do commit `e650e75843afc3a44e8e0ee0e601cb8e4217d887`.
+
+| Cenário | Resultado real | Avaliação |
+|---|---|---|
+| B — FK já correta | `OK`, exit code 0; uma FK permaneceu. O log geral do MySQL registrou os ramos preparados `SELECT 1` para DROP e ADD e nenhum `ALTER TABLE temporadas`; a FK não foi recriada. | Aprovado |
+| C — relação equivalente sob outro nome | Diagnóstico `ERRO: relação equivalente existe com outro nome`, exit code 0; permaneceu somente a FK alternativa, sem duplicata. | Comportamento esperado; operador deve tratar como não concluído |
+| D — nome canônico ocupado por relação com destino `clubes.id` | Diagnóstico `ERRO: nome da FK existe com estrutura ou regras incompatíveis`, exit code 0; a FK incompatível continuou apontando para `clubes.id`, sem criação da relação esperada. | Aprovado quanto à não destruição; operador deve tratar como não concluído |
+| E — temporada órfã | `ERROR 1452` na linha 398, ao adicionar a FK; exit code 1. A execução foi interrompida antes do SELECT diagnóstico final. As seis colunas e três tabelas já tinham sido aplicadas; a FK ficou ausente e as duas temporadas (incluindo a órfã) permaneceram. | Falha identificável, mas aplicação parcial confirmada |
+| F — coluna `probabilidade_campeao VARCHAR(20)` preexistente | A migration ignorou o tipo errado, criou as demais colunas/tabelas, retornou `OK` e exit code 0. | Defeito confirmado: falso sucesso com schema incompatível |
+| F — `usuarios` preexistente com apenas `id` e `nome VARCHAR(20)` | `CREATE TABLE IF NOT EXISTS` preservou a tabela divergente; as outras tabelas foram criadas, FK validada, diagnóstico `OK`, exit code 0. | Defeito confirmado: falso sucesso com tabela incompatível |
+| F — tabela-base `clubes_temporadas` ausente | `ERROR 1146` na linha 171, exit code 1; falha antes da criação das seis colunas e das três tabelas novas. | Falha direta, sem diagnóstico final |
+| F — coluna `temporadas.competicao_id` ausente | `ERROR 1072` na linha 398, exit code 1; as seis colunas e três tabelas já estavam aplicadas, a FK não foi criada e o SELECT final não executou. | Falha parcial confirmada |
+
+Na execução inicial da revisão anterior, variações de engine e PK/índices incompatíveis ainda não tinham sido testadas nem verificadas automaticamente.
+
+### Reteste complementar do preflight 1.2 — 24/11/2026
+
+Executado em MySQL Server **8.0.46** dentro de um container criado só para esta tarefa, com rede `none`, `/var/lib/mysql` em `tmpfs`, sem portas publicadas e sem mounts. Nenhum volume nem container do Compose foi usado. O container temporário foi identificado como `arena-migration-issue1-preflight-20261124-a91f` (ID `32458c857fd29117f0e07d6c114a16b367b3e67e683418ebcb877b1294ea0d9d`). O container de integração existente e o container `brasileirao-risk-monitor-db-1` foram deixados intactos.
+
+| Cenário | Resultado observado na versão 1.2 | Avaliação |
+|---|---|---|
+| 1 — `probabilidade_campeao VARCHAR(20)` preexistente | Diagnóstico identifica tipo incompatível; cliente retorna exit code 1. Apenas a coluna inválida já preparada pelo cenário existia; nenhuma das outras cinco probabilidades nem as três tabelas novas foi criada. | Aprovado |
+| 2 — `usuarios` incompleta (`id`, `nome VARCHAR(20)`) | Lista colunas ausentes/incompatíveis, índice único e FK ausentes; exit code 1. Zero colunas de probabilidade e zero tabelas novas foram criadas; a tabela original ficou intacta. | Aprovado |
+| 3 — `clubes_temporadas` ausente | Diagnóstico `Tabela obrigatória ausente`; exit code 1. Zero tabelas novas criadas. | Aprovado |
+| 4 — `temporadas.competicao_id` ausente | Diagnóstico da coluna ausente/incompatível; exit code 1. Zero tabelas novas criadas. | Aprovado |
+| 5 — temporada com `competicao_id=999999` sem competição | Diagnóstico inclui ID da temporada e instrução para consultar com `LEFT JOIN`; exit code 1. A coluna órfã foi preservada e nenhuma coluna probabilística/tabela nova foi criada. | Aprovado |
+| 6 — schema e seed históricos válidos | Preflight `PREFLIGHT OK`; migration conclui com `fk_temporadas_competicao_status=OK`, convertendo a FK histórica para `DELETE_RULE=RESTRICT`, `UPDATE_RULE=RESTRICT`. Contagens: 1 competição, 1 temporada, 20 clubes, 20 vínculos, 0 partidas. | Aprovado |
+| 7 — segunda execução | Preflight aprovado e status final `OK`; contagens e snapshot dos dados permaneceram iguais. | Aprovado |
+| FK equivalente sob nome alternativo | Preflight retorna erro antes dos DDLs; exit code 1. A FK alternativa permanece única; não foram adicionadas colunas ou tabelas. | Aprovado |
+| Nome canônico associado a `temporadas.competicao_id → clubes.id` | Preflight retorna erro antes dos DDLs; exit code 1. A constraint incompatível permanece intacta; sem alterações adicionais. | Aprovado |
+
+Nos cenários históricos válidos, comparei snapshots JSON dos valores de todas as colunas que existiam nas cinco tabelas do PR #38. O SHA-256 antes e depois da primeira execução, e novamente após a segunda execução, foi `2f684a7d2c2ae5885111ab81699a88599a234a5b1e2dbbd83a37cf637ed908ab`.
+
+O guard de falha usa uma consulta dinâmica à tabela sentinela inexistente, após imprimir as linhas de diagnóstico. No cliente `mysql` em modo batch usado pelo projeto, o servidor retorna erro SQL e a execução termina com exit code 1 antes dos DDLs da migration. A opção `--force` não pode ser usada, pois instrui o cliente a continuar após erros.
+
+Ainda não foram exercitadas todas as variações possíveis de precisão temporal, collation/charset, constraints com múltiplas colunas, triggers ou privilégios insuficientes. O preflight foca os atributos que a migration e as tabelas criadas dependem diretamente; incompatibilidades fora dessas verificações podem exigir inspeção específica.
 
 ---
 
-## 8. Instalação e migração do banco
+## 8. Migration incremental — pré-condições, limites e validação
 
-- **Banco novo:** executar `database/schema.sql`. O arquivo cria as tabelas completas.
-- **Banco já existente (schema anterior do PR #38):** fazer backup e executar `database/migrations/001_alinhar_schema_mvp.sql`.
-- A migração verifica cada coluna de probabilidade em `clubes_temporadas` por meio de `INFORMATION_SCHEMA`, cria somente as ausentes e cria as tabelas novas com `CREATE TABLE IF NOT EXISTS`.
-- A migração não altera tipos de PK/FK nem converte placares existentes. Os IDs internos permanecem `INT` signed para manter compatibilidade com as tabelas existentes.
-- Reexecutar `schema.sql` não atualiza a definição de tabelas já existentes; por isso, não substitui a migração.
-- Executar primeiro em uma cópia de desenvolvimento e validar FKs, colunas e contagens antes de aplicar em ambiente com dados reais.
+### Quando usar
+
+Somente em bancos criados pelo schema do PR #38 (banco `brasileirao_risco` com `competicoes`, `temporadas`, `clubes`, `clubes_temporadas` e `partidas`). Para banco novo, usar `database/schema.sql`.
+
+### Como executar e como o preflight interrompe
+
+O repositório não possui runner PHP, script Composer ou workflow de CI para migrations. O procedimento documentado é executar o SQL diretamente pelo cliente oficial `mysql` em modo batch, selecionando explicitamente o banco (`mysql brasileirao_risco < database/migrations/001_alinhar_schema_mvp.sql`). O arquivo não contém `USE`. Não use a opção `--force`.
+
+Antes dos blocos 1–3, o preflight cria uma tabela **temporária da sessão**, registra e mostra as divergências encontradas e prepara uma consulta de guarda. Se houver qualquer erro, a guarda tenta consultar uma tabela sentinela inexistente; o servidor retorna erro SQL e o cliente `mysql` batch encerra com código diferente de zero antes dos DDLs de alteração. A tabela temporária desaparece quando a conexão termina. A migration não cria procedure, trigger ou outro objeto persistente para esse controle.
+
+O preflight verifica:
+
+- Seleção de um banco; existência das tabelas históricas `competicoes`, `temporadas`, `clubes` e `clubes_temporadas` e engine InnoDB.
+- Tipos, nulabilidade e PKs simples de `competicoes.id`, `temporadas.id`, `temporadas.competicao_id`, `clubes.id`, `clubes_temporadas.id`, `temporada_id` e `clube_id`.
+- Se qualquer coluna de probabilidade já existir, tipo, precisão/escala quando DECIMAL, nulabilidade e default NULL. Colunas ausentes são aceitas para o Bloco 1 adicioná-las.
+- Se `usuarios`, `simulacoes_usuarios` ou `sync_logs` já existirem: colunas contratuais, tipos, nulabilidade, PK, engine, índice único de email e relacionamentos com regras de exclusão esperadas. O preflight não tenta converter tabela divergente.
+- A estrutura da FK canônica `fk_temporadas_competicao`; uma relação sob outro nome é reportada e bloqueia para evitar duplicação. A FK canônica com a relação histórica correta pode ter regras de exclusão/atualização diferentes; o Bloco 3 ajusta para RESTRICT/RESTRICT.
+- Temporadas órfãs (`temporadas.competicao_id` sem `competicoes.id`). O diagnóstico informa os IDs e orienta a consulta de LEFT JOIN; nenhum registro é alterado ou removido.
+
+Falha do preflight significa que nenhum DDL dos três blocos foi executado. Se uma falha ocorrer depois que a guarda aprovar, DDL MySQL pode provocar commits implícitos; não há rollback transacional global. Faça backup e execute primeiro em cópia descartável.
+
+### O que a migration faz (Bloco 1)
+
+Adiciona as seis colunas ausentes a `clubes_temporadas`. Colunas preexistentes passam pelo preflight e são preservadas se compatíveis.
+
+Em uma instalação nova, essas seis colunas aparecem antes de `criado_em` e `atualizado_em`; na migration incremental, `ADD COLUMN` as acrescenta ao final da tabela histórica. Os nomes e contratos de tipo/null/default são os mesmos quando a coluna é criada, mas a ordem física das colunas difere. Repositories devem selecionar colunas pelo nome, nunca depender de `SELECT *` ou da posição ordinal.
+
+Uma coluna preexistente incompatível bloqueia a migration antes de qualquer alteração. Nenhuma conversão automática é tentada; a resolução precisa de uma migration específica com estratégia de dados aprovada.
+
+### O que a migration faz (Bloco 2)
+
+Cria `usuarios`, `simulacoes_usuarios` e `sync_logs` via `CREATE TABLE IF NOT EXISTS` quando estiverem ausentes. Se uma delas já existir, o preflight compara a estrutura contratual antes de permitir que a migration continue.
+
+Uma tabela preexistente incompatível reprova o preflight e não é alterada automaticamente. `CREATE TABLE IF NOT EXISTS` não é usado como mecanismo de atualização.
+
+### O que a migration faz (Bloco 3)
+
+Confere a tabela/coluna de origem (`temporadas.competicao_id`), o schema/tabela/coluna referenciados (`DATABASE().competicoes.id`), que a FK tenha uma única coluna e as regras `DELETE_RULE` e `UPDATE_RULE`, cruzando `REFERENTIAL_CONSTRAINTS` e `KEY_COLUMN_USAGE`. No MySQL 8.0.46, uma FK histórica que omite `ON UPDATE` aparece como `UPDATE_RULE=NO ACTION`; para atingir o contrato explícito, a migration recria a relação com `ON DELETE RESTRICT ON UPDATE RESTRICT`. Adiciona a FK esperada quando o nome está livre e não existe relação equivalente sob outro nome.
+
+Se o nome canônico estiver associado a outra relação, ou se houver relação equivalente sob outro nome, o preflight falha antes do primeiro DDL. A FK histórica canônica correta pode ser substituída por RESTRICT/RESTRICT.
+
+### Idempotência
+
+Com o preflight aprovado, os blocos podem ser reexecutados. Estruturas divergentes são rejeitadas, não corrigidas. O resultado textual final da FK deve ser `OK`; uma inconsistência no estado final gera erro SQL. Isso não oferece rollback geral se um DDL posterior falhar.
+
+### Validação após execução
+
+Executar as queries do cabeçalho do arquivo `001_alinhar_schema_mvp.sql` e confirmar os resultados esperados descritos lá.
 
 ---
 
 ## 9. Fora do modelo obrigatório do MVP
 
-- Histórico de classificação (#47).
-- Auditoria comparativa (#48).
+- Histórico de classificação.
+- Auditoria comparativa.
 - Qualquer extensão de `simulacoes_usuarios` além da persistência básica de 3 cenários.
 
 ---
 
-## 10. Decisões técnicas registradas [NOVO]
+## 10. Decisões técnicas registradas
 
-| ID | Decisão | Justificativa | Impacto |
+| ID | Escolha atualmente implementada (aprovação formal não comprovada) | Justificativa registrada no código/documentos | Impacto / divergência em relação à DDL v2.1 |
 |---|---|---|---|
-| DT-01 | `competicoes` mantida como tabela de suporte | `temporadas.competicao_id` requer referência; mapeamento de dados v4 exige persistir o `external_id` da competição | Não altera as 7 tabelas obrigatórias do MVP; documentada como suporte à integração |
-| DT-02 | `simulacoes_usuarios` incluída como obrigatória | Especificação v2.1 (RF07, RN05, perfil.php) exige persistência dos cenários salvos | Dicionário v1.0 (seção 8) estava desatualizado em relação à especificação aprovada |
-| DT-03 | `clubes_temporadas` sem colunas de estatística de partida | Classificação derivada de `partidas` evita redundância e dessincronização; DDL ilustrativa da seção 4.2 do documento v2.1 não é normativa | `StandingsService` permanece como única fonte de verdade para classificação |
-| DT-04 | `partidas.status` como `VARCHAR(30)`, não `ENUM` | A especificação funcional (mapeamento de dados, seção 4) exige extensibilidade; DDL ilustrativa do documento v2.1 usa ENUM incorretamente | Status desconhecidos são preservados sem erro de banco |
-| DT-05 | `usuarios.clube_favorito_id` permite NULL | Dicionário v1.0 e RF04 permitem troca de clube e perfil sem clube vinculado; DDL ilustrativa do documento v2.1 define NOT NULL | FK com `ON DELETE SET NULL`; serviço deve tratar NULL na exibição do clube favorito |
+| DT-01 | `competicoes` mantida como tabela de suporte | `temporadas.competicao_id` requer referência; mapeamento v4 exige `external_id` da competição | Não está entre as 7 tabelas do MVP; necessária para integridade referencial |
+| DT-02 | `simulacoes_usuarios` incluída como obrigatória | RF07, RN05 e perfil.php exigem persistência de cenários salvos | Dicionário v1.0 classificava como backlog; corrigido |
+| DT-03 | `clubes_temporadas` sem colunas de estatística de partida | Classificação derivada de `partidas` evita redundância; `StandingsService` é fonte única | DDL ilustrativa v2.1 incluía pontos/jogos/vitórias; não implementado |
+| DT-04 | `partidas.status` como `VARCHAR(30)`, não `ENUM` | Mapeamento de dados exige extensibilidade; estados desconhecidos devem ser preservados | DDL ilustrativa v2.1 usava ENUM; não implementado |
+| DT-05 | `usuarios.clube_favorito_id` permite NULL | RF04 permite perfil sem clube vinculado; FK com `ON DELETE SET NULL` | DDL ilustrativa v2.1 definia NOT NULL; não implementado |
+| DT-06 | Nome canônico da coluna de timestamp de probabilidades: `probabilidades_calculadas_em` | A DDL v2.1 não nomeava esse campo; o schema implementado (PR #49) criou `probabilidades_calculadas_em`. `ClubeRepository.php` usava erroneamente `probabilidades_calculadas_on` — corrigido na Issue #1. | SQL executável deve usar `probabilidades_calculadas_em`; menções ao nome antigo em comentários explicativos são apenas históricas |
+| DT-07 | Nome do banco: `brasileirao_risco`, não `arena_brasileirao` | A DDL ilustrativa da seção 4.2 usa `arena_brasileirao`. O schema implementado usa `brasileirao_risco` desde o PR #38. Renomear exigiria recriação ou migração de banco em todos os ambientes | `DB_DATABASE=brasileirao_risco` em `.env`; testes e scripts devem usar este nome |
+
+### Decisões e divergências pendentes de validação da equipe
+
+| Tópico | Situação | Opções |
+|---|---|---|
+| `clubes.external_id`: `NOT NULL` no schema vs. NULL permitido na DDL v2.1 | `docs/api-recognition/mapeamento-dados.md` trata o ID externo retornado como obrigatório; aprovação formal da divergência de schema não comprovada | Confirmar se registros sem ID devem ser rejeitados/adiados ou aceitos com `NULL`; não alterar o tipo sem decisão |
+| Campos de integração adicionais em `temporadas` (`external_id`, `competicao_id`, ano/datas, rodada e `api_updated_at`) | Estão usados no mapeamento football-data.org; a DDL v2.1 é ilustrativa e a aprovação formal da diferença não está registrada | Preservar enquanto necessários à integração; confirmar o contrato e registrar aprovação da extensão |
+| `clubes.sigla VARCHAR(10)` vs. `CHAR(3)` | Implementado desde PR #38; aprovação não comprovada | Confirmar a necessidade de suportar siglas com comprimentos diferentes antes de padronizar |
+| Ausência de `clubes.cor_primaria` | Ausente no schema; aprovação não comprovada | Confirmar se a interface/identidade visual depende desse campo |
+| `partidas.data_hora_utc NOT NULL` e nome diferente de `data_hora` | O mapeamento local (`docs/api-recognition/mapeamento-dados.md`) marca `utcDate` obrigatório; a regra geral do dicionário manda preservar ausência como NULL; a DDL v2.1 permite NULL | Confirmar que o mapper trata payload sem `utcDate` rejeitando/adiando a gravação. Se a ausência for válida, `NOT NULL` contradiz a regra geral e exige mudança aprovada |
+| `partidas.gols_mandante` e `gols_visitante INT NULL` vs. `TINYINT UNSIGNED` | Implementado; aprovação não comprovada | Confirmar limites e compatibilidade com dados antes de alterar tipos |
+| Ausência de `partidas.minuto_jogo` | Ausente; aprovação não comprovada | Definir necessidade funcional e origem do dado; se aprovado, adicionar por migration nova |
+| `partidas.status VARCHAR(30)` vs. ENUM | Escolha implementada; aprovação formal não comprovada | A justificativa de extensibilidade está registrada, mas deve ser validada pela equipe |
+| Estatísticas de classificação ausentes em `clubes_temporadas` | Escolha implementada; aprovação formal não comprovada | Validar a decisão de derivar classificação a partir de `partidas` e `StandingsService` |
+| `usuarios.clube_favorito_id NULL` vs. NOT NULL | Escolha implementada; aprovação formal não comprovada | Validar o contrato de perfil e a regra de exclusão `ON DELETE SET NULL` |
+| `sync_logs` ampliada em relação à DDL | Implementado; aprovação não comprovada | Confirmar quais campos e estados de sincronização são necessários |
+| Regras CASCADE das FKs de partidas | Implementadas; DDL v2.1 não especifica regras de exclusão | Validar impacto de exclusões em partidas antes de manter ou alterar |
+| Nome do banco `brasileirao_risco` vs. `arena_brasileirao` | `brasileirao_risco` usado desde PR #38; aprovação da divergência não comprovada | Confirmar padrão de configuração; não renomear banco sem plano explícito |
+| FK `temporadas.competicao_id` ON DELETE RESTRICT vs. histórico CASCADE | A conversão foi executada e verificada em MySQL 8.0.46 descartável, com RESTRICT/RESTRICT; aprovação formal da política ainda não está comprovada | Confirmar a política antes de aplicar a migration em banco persistente |
 
 ---
 
@@ -388,4 +505,4 @@ Qualquer mudança de nome, tipo, nulabilidade, chave, relacionamento ou signific
 4. adicionar/ajustar testes;
 5. registrar a decisão no Pull Request e nas issues afetadas.
 
-**Este documento é a referência funcional do modelo de dados. Se houver divergência entre ele e o schema implementado, registrar e corrigir antes de criar novas consultas dependentes da coluna divergente.**
+**Este documento é a referência funcional do modelo de dados. Se houver divergência entre ele e o schema implementado, registrar como pendente e corrigir antes de criar consultas dependentes da coluna divergente.**
