@@ -54,28 +54,95 @@ class StandingsServiceTest extends TestCase
 
     public function testDesempatePorConfrontoDiretoQuandoEmpatadosEmPontosVitoriasSaldoEGolsPro(): void
     {
-        $clubes = [
-            ['id' => 10, 'nome' => 'Clube A', 'nome_curto' => 'Clube A', 'sigla' => 'CLA'],
-            ['id' => 20, 'nome' => 'Clube B', 'nome_curto' => 'Clube B', 'sigla' => 'CLB'],
+    $clubes = [
+        ['id' => 10, 'nome' => 'Clube A', 'nome_curto' => 'Clube A', 'sigla' => 'CLA'],
+        ['id' => 20, 'nome' => 'Clube B', 'nome_curto' => 'Clube B', 'sigla' => 'CLB'],
+        ['id' => 30, 'nome' => 'Clube C', 'nome_curto' => 'Clube C', 'sigla' => 'CLC'],
+        ['id' => 40, 'nome' => 'Clube D', 'nome_curto' => 'Clube D', 'sigla' => 'CLD'],
+    ];
+
+    $partidas = [
+        // Clube A vence Clube B por 1x0.
+        ['mandante_id' => 10, 'visitante_id' => 20, 'gols_mandante' => 1, 'gols_visitante' => 0, 'status' => 'FINISHED'],
+
+        // Clube C vence Clube A por 1x0.
+        ['mandante_id' => 30, 'visitante_id' => 10, 'gols_mandante' => 1, 'gols_visitante' => 0, 'status' => 'FINISHED'],
+
+        // Clube B vence Clube C por 1x0.
+        ['mandante_id' => 20, 'visitante_id' => 30, 'gols_mandante' => 1, 'gols_visitante' => 0, 'status' => 'FINISHED'],
+
+        // Clube D também vence Clube C por 1x0.
+        ['mandante_id' => 40, 'visitante_id' => 30, 'gols_mandante' => 1, 'gols_visitante' => 0, 'status' => 'FINISHED'],
+    ];
+
+    $service = new StandingsService();
+    $tabela = $service->calculateFromData($clubes, $partidas);
+
+    $clubeA = array_search(10, array_column($tabela, 'clube_id'), true);
+    $clubeB = array_search(20, array_column($tabela, 'clube_id'), true);
+
+    $this->assertNotFalse($clubeA);
+    $this->assertNotFalse($clubeB);
+
+    $this->assertSame(3, $tabela[$clubeA]['pontos']);
+    $this->assertSame(3, $tabela[$clubeB]['pontos']);
+
+    $this->assertSame(1, $tabela[$clubeA]['vitorias']);
+    $this->assertSame(1, $tabela[$clubeB]['vitorias']);
+
+    $this->assertSame(0, $tabela[$clubeA]['saldo_gols']);
+    $this->assertSame(0, $tabela[$clubeB]['saldo_gols']);
+
+    $this->assertSame(1, $tabela[$clubeA]['gols_pro']);
+    $this->assertSame(1, $tabela[$clubeB]['gols_pro']);
+
+    $this->assertLessThan($clubeB, $clubeA);
+    }
+    public function testIgnoraPartidasComStatusNaoOficialOuPlacarNulo(): void
+    {
+    $clubes = [
+        ['id' => 1, 'nome' => 'Clube A', 'nome_curto' => 'Clube A', 'sigla' => 'CLA'],
+        ['id' => 2, 'nome' => 'Clube B', 'nome_curto' => 'Clube B', 'sigla' => 'CLB'],
+    ];
+
+    $partidas = [];
+
+    foreach (['IN_PLAY', 'PAUSED', 'TIMED', 'POSTPONED', 'CANCELLED', 'UNKNOWN'] as $status) {
+        $partidas[] = [
+            'mandante_id' => 1,
+            'visitante_id' => 2,
+            'gols_mandante' => 5,
+            'gols_visitante' => 0,
+            'status' => $status,
         ];
+    }
 
-        $partidas = [
-            // Clube B vence Clube A por 1x0 (ambos ficam com 0 pts? Não: se jogarem contra terceiros fictícios, ou um jogo cada)
-            // Como só temos 2 clubes, se Clube B vencer 1x0 fica com 3 pts. Para empatarem em tudo e decidir no H2H,
-            // precisamos de um 3º clube C:
-            // B vence A (1x0), A vence C (1x0), C vence B (1x0) -> aqui os 3 empatam;
-            // Ou A e B jogam 2 vezes (B vence 2x1, A vence 1x0 -> B vence no H2H por gols fora/pró).
-            ['mandante_id' => 10, 'visitante_id' => 20, 'gols_mandante' => 1, 'gols_visitante' => 2, 'status' => 'FINISHED'],
-            ['mandante_id' => 20, 'visitante_id' => 10, 'gols_mandante' => 0, 'gols_visitante' => 1, 'status' => 'FINISHED'],
-        ];
+    $partidas[] = [
+        'mandante_id' => 1,
+        'visitante_id' => 2,
+        'gols_mandante' => null,
+        'gols_visitante' => null,
+        'status' => 'FINISHED',
+    ];
 
-        $service = new StandingsService();
-        $tabela = $service->calculateFromData($clubes, $partidas);
+    $partidas[] = [
+        'mandante_id' => 2,
+        'visitante_id' => 1,
+        'gols_mandante' => 1,
+        'gols_visitante' => null,
+        'status' => 'AWARDED',
+    ];
 
-        // Ambos: 3 pts, 1 vitória, SG 0, GP 2. No confronto direto: B tem 2 gols pró contra 2, mas no critério H2H ambos empatam;
-        // Se B vencer por 2x0 e A vencer por 2x0? Mesma coisa. Se B vencer 2x1 e A vencer 1x0, empatam em H2H e vai pro nome ('Clube A').
-        // Vamos validar que a ordenação é determinística e retorna as posições 1 e 2.
-        $this->assertSame(1, $tabela[0]['posicao']);
-        $this->assertSame(2, $tabela[1]['posicao']);
+    $service = new StandingsService();
+    $tabela = $service->calculateFromData($clubes, $partidas);
+
+    $this->assertCount(2, $tabela);
+
+    foreach ($tabela as $clube) {
+        $this->assertSame(0, $clube['jogos']);
+        $this->assertSame(0, $clube['pontos']);
+        $this->assertSame(0, $clube['gols_pro']);
+        $this->assertSame(0, $clube['gols_contra']);
+        }
     }
 }
