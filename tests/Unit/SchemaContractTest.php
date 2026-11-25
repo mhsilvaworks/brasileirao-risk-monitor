@@ -711,16 +711,22 @@ final class SchemaContractTest extends TestCase
     }
 
     /**
-     * O dicionário deve listar decisões pendentes de aprovação separadamente.
+     * O dicionário deve identificar as decisões técnicas como aprovadas.
      */
-    public function testDicionarioListaPendenciasNaoAprovadas(): void
+    public function testDicionarioListaDecisoesAprovadas(): void
     {
         $dic = self::readFile('docs/dicionario-dados.md');
 
         $this->assertStringContainsString(
-            'pendentes de validação',
+            '## 10. Decisões técnicas aprovadas',
             $dic,
-            'O dicionário deve separar escolhas implementadas de divergências pendentes de validação'
+            'O dicionário deve identificar separadamente as decisões técnicas aprovadas'
+        );
+
+        $this->assertStringContainsString(
+            'formalmente aprovadas na Issue #1',
+            $dic,
+            'O dicionário deve registrar a aprovação das decisões técnicas'
         );
     }
 
