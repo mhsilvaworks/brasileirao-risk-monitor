@@ -133,4 +133,38 @@ final class ClubeRepositoryTest extends TestCase
 
         $repository->vincularTemporada(2026, 55);
     }
+    public function testFindByTemporadaUsaNomeCorretoDaColunaEFiltraTemporada(): void
+    {
+        $resultadoEsperado = [
+            [
+                'id' => 55,
+                'nome_curto' => 'Clube Teste',
+                'probabilidades_calculadas_em' => '2026-11-24 10:00:00',
+            ],
+        ];
+
+        $statement = $this->createMock(PDOStatement::class);
+
+        $statement->expects($this->once())
+            ->method('execute')
+            ->with([':temporada_id' => 2026]);
+
+        $statement->expects($this->once())
+            ->method('fetchAll')
+            ->with(PDO::FETCH_ASSOC)
+            ->willReturn($resultadoEsperado);
+
+        $pdo = $this->createMock(PDO::class);
+
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->with($this->stringContains('ct.probabilidades_calculadas_em'))
+            ->willReturn($statement);
+
+        $repository = new ClubeRepository($pdo);
+
+        $resultado = $repository->findByTemporada(2026);
+
+        $this->assertSame($resultadoEsperado, $resultado);
+    }
 }

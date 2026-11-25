@@ -95,7 +95,7 @@ class ClubeRepository
                     ct.probabilidade_sulamericana,
                     ct.probabilidade_rebaixamento,
                     ct.probabilidades_posicoes,
-                    ct.probabilidades_calculadas_on
+                    ct.probabilidades_calculadas_em
                FROM clubes c
                INNER JOIN clubes_temporadas ct ON ct.clube_id = c.id
               WHERE ct.temporada_id = :temporada_id
