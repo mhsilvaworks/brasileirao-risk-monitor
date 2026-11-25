@@ -7,7 +7,7 @@
 **Stack:** PHP 8.3, MySQL 8, PDO, football-data.org v4
 **Objetivo:** definir um contrato único para banco, serviços, repositórios, sincronização, cálculos e interface.
 
-> **Escopo deste documento:** descreve o schema implementado e a migration incremental. Onde o schema difere da DDL ilustrativa da seção 4.2 do documento v2.1, a diferença está registrada na seção 10. As entradas DT-01 a DT-07 descrevem escolhas presentes no código e suas justificativas; a existência dessas escolhas não comprova aprovação formal da equipe. Onde não há evidência de aprovação, a divergência permanece pendente de validação.
+> **Escopo deste documento:** descreve o schema implementado e a migration incremental. As diferenças em relação à DDL ilustrativa da seção 4.2 do documento v2.1 foram revisadas e aprovadas pela equipe, conforme registro da Issue #1. A seção 10 consolida as decisões aprovadas e suas justificativas. Este documento, em conjunto com `database/schema.sql` e a migration incremental, é a referência do contrato de dados vigente.
 
 ---
 
@@ -22,7 +22,7 @@
 - Valores monetários não fazem parte do MVP. Percentuais são armazenados de 0.00 a 100.00, nunca como fração 0–1.
 - Datas recebidas da API são normalizadas para UTC antes da persistência. Exibição local usa `America/Sao_Paulo`.
 - Campo que pode estar ausente na fonte deve permanecer NULL. Não converter ausência em zero, string vazia ou data inventada.
-- **Ressalva pendente:** `partidas.data_hora_utc` está `NOT NULL`; ainda não há evidência suficiente aqui para afirmar que a fonte sempre fornece esse valor. Não inferir que a regra geral está atendida: validar contrato e mapeamento antes de alterar o schema.
+- **Exceção aprovada à regra de ausência:** `partidas.data_hora_utc` permanece `NOT NULL`, pois o contrato/mapeamento da football-data.org trata `utcDate` como obrigatório. Se o payload não trouxer `utcDate`, a partida não deve ser persistida com data inventada ou NULL; a operação deve rejeitar/adiar o registro e sinalizar a inconsistência.
 - Não usar `ENUM` para status externos: a API pode introduzir novos estados. Usar VARCHAR e tratar estados desconhecidos de forma segura.
 - SQL somente em Repositories/infraestrutura; páginas PHP não devem conter consultas SQL.
 - Toda escrita externa deve ser parametrizada com PDO; nunca concatenar valores recebidos do usuário/API em SQL.
@@ -90,7 +90,7 @@ clubes      1 ─── N simulacoes_usuarios
 | criado_em | TIMESTAMP | Sim | DEFAULT CURRENT_TIMESTAMP | Criação local |
 | atualizado_em | TIMESTAMP | Sim | ON UPDATE CURRENT_TIMESTAMP | Alteração local |
 
-**Índices/FKs:** `UNIQUE(external_id)`; FK `competicao_id → competicoes.id ON DELETE RESTRICT`.
+**Índices/FKs:** `UNIQUE(external_id)`; FK `competicao_id → competicoes.id ON DELETE RESTRICT ON UPDATE RESTRICT` (política aprovada na Issue #1).
 
 ---
 
@@ -480,36 +480,37 @@ Executar as queries do cabeçalho do arquivo `001_alinhar_schema_mvp.sql` e conf
 
 ---
 
-## 10. Decisões técnicas registradas
+## 10. Decisões técnicas aprovadas
 
-| ID | Escolha atualmente implementada (aprovação formal não comprovada) | Justificativa registrada no código/documentos | Impacto / divergência em relação à DDL v2.1 |
-|---|---|---|---|
-| DT-01 | `competicoes` mantida como tabela de suporte | `temporadas.competicao_id` requer referência; mapeamento v4 exige `external_id` da competição | Não está entre as 7 tabelas do MVP; necessária para integridade referencial |
-| DT-02 | `simulacoes_usuarios` incluída como obrigatória | RF07, RN05 e perfil.php exigem persistência de cenários salvos | Dicionário v1.0 classificava como backlog; corrigido |
-| DT-03 | `clubes_temporadas` sem colunas de estatística de partida | Classificação derivada de `partidas` evita redundância; `StandingsService` é fonte única | DDL ilustrativa v2.1 incluía pontos/jogos/vitórias; não implementado |
-| DT-04 | `partidas.status` como `VARCHAR(30)`, não `ENUM` | Mapeamento de dados exige extensibilidade; estados desconhecidos devem ser preservados | DDL ilustrativa v2.1 usava ENUM; não implementado |
-| DT-05 | `usuarios.clube_favorito_id` permite NULL | RF04 permite perfil sem clube vinculado; FK com `ON DELETE SET NULL` | DDL ilustrativa v2.1 definia NOT NULL; não implementado |
-| DT-06 | Nome canônico da coluna de timestamp de probabilidades: `probabilidades_calculadas_em` | A DDL v2.1 não nomeava esse campo; o schema implementado (PR #49) criou `probabilidades_calculadas_em`. `ClubeRepository.php` usava erroneamente `probabilidades_calculadas_on` — corrigido na Issue #1. | SQL executável deve usar `probabilidades_calculadas_em`; menções ao nome antigo em comentários explicativos são apenas históricas |
-| DT-07 | Nome do banco: `brasileirao_risco`, não `arena_brasileirao` | A DDL ilustrativa da seção 4.2 usa `arena_brasileirao`. O schema implementado usa `brasileirao_risco` desde o PR #38. Renomear exigiria recriação ou migração de banco em todos os ambientes | `DB_DATABASE=brasileirao_risco` em `.env`; testes e scripts devem usar este nome |
+As decisões abaixo foram formalmente aprovadas na Issue #1. Elas representam o modelo de dados vigente, mesmo quando diferem da DDL ilustrativa da seção 4.2 do documento v2.1. A aprovação mantém o schema implementado; não determina alteração retroativa nem conversão automática de bancos.
 
-### Decisões e divergências pendentes de validação da equipe
-
-| Tópico | Situação | Opções |
+| ID | Decisão aprovada | Justificativa e impacto |
 |---|---|---|
-| `clubes.external_id`: `NOT NULL` no schema vs. NULL permitido na DDL v2.1 | `docs/api-recognition/mapeamento-dados.md` trata o ID externo retornado como obrigatório; aprovação formal da divergência de schema não comprovada | Confirmar se registros sem ID devem ser rejeitados/adiados ou aceitos com `NULL`; não alterar o tipo sem decisão |
-| Campos de integração adicionais em `temporadas` (`external_id`, `competicao_id`, ano/datas, rodada e `api_updated_at`) | Estão usados no mapeamento football-data.org; a DDL v2.1 é ilustrativa e a aprovação formal da diferença não está registrada | Preservar enquanto necessários à integração; confirmar o contrato e registrar aprovação da extensão |
-| `clubes.sigla VARCHAR(10)` vs. `CHAR(3)` | Implementado desde PR #38; aprovação não comprovada | Confirmar a necessidade de suportar siglas com comprimentos diferentes antes de padronizar |
-| Ausência de `clubes.cor_primaria` | Ausente no schema; aprovação não comprovada | Confirmar se a interface/identidade visual depende desse campo |
-| `partidas.data_hora_utc NOT NULL` e nome diferente de `data_hora` | O mapeamento local (`docs/api-recognition/mapeamento-dados.md`) marca `utcDate` obrigatório; a regra geral do dicionário manda preservar ausência como NULL; a DDL v2.1 permite NULL | Confirmar que o mapper trata payload sem `utcDate` rejeitando/adiando a gravação. Se a ausência for válida, `NOT NULL` contradiz a regra geral e exige mudança aprovada |
-| `partidas.gols_mandante` e `gols_visitante INT NULL` vs. `TINYINT UNSIGNED` | Implementado; aprovação não comprovada | Confirmar limites e compatibilidade com dados antes de alterar tipos |
-| Ausência de `partidas.minuto_jogo` | Ausente; aprovação não comprovada | Definir necessidade funcional e origem do dado; se aprovado, adicionar por migration nova |
-| `partidas.status VARCHAR(30)` vs. ENUM | Escolha implementada; aprovação formal não comprovada | A justificativa de extensibilidade está registrada, mas deve ser validada pela equipe |
-| Estatísticas de classificação ausentes em `clubes_temporadas` | Escolha implementada; aprovação formal não comprovada | Validar a decisão de derivar classificação a partir de `partidas` e `StandingsService` |
-| `usuarios.clube_favorito_id NULL` vs. NOT NULL | Escolha implementada; aprovação formal não comprovada | Validar o contrato de perfil e a regra de exclusão `ON DELETE SET NULL` |
-| `sync_logs` ampliada em relação à DDL | Implementado; aprovação não comprovada | Confirmar quais campos e estados de sincronização são necessários |
-| Regras CASCADE das FKs de partidas | Implementadas; DDL v2.1 não especifica regras de exclusão | Validar impacto de exclusões em partidas antes de manter ou alterar |
-| Nome do banco `brasileirao_risco` vs. `arena_brasileirao` | `brasileirao_risco` usado desde PR #38; aprovação da divergência não comprovada | Confirmar padrão de configuração; não renomear banco sem plano explícito |
-| FK `temporadas.competicao_id` ON DELETE RESTRICT vs. histórico CASCADE | A conversão foi executada e verificada em MySQL 8.0.46 descartável, com RESTRICT/RESTRICT; aprovação formal da política ainda não está comprovada | Confirmar a política antes de aplicar a migration em banco persistente |
+| DT-01 | Manter `competicoes` como tabela auxiliar de integração, além das 7 tabelas obrigatórias do MVP. | `temporadas.competicao_id` precisa de referência íntegra; o mapeamento v4 usa o `external_id` da competição. |
+| DT-02 | Manter `simulacoes_usuarios` como tabela obrigatória. | RF07, RN05 e o perfil do usuário exigem persistência dos cenários salvos. |
+| DT-03 | Manter `clubes_temporadas` sem colunas duplicadas de estatísticas de partidas (pontos, jogos, vitórias etc.). | A classificação é derivada de `partidas` pelo `StandingsService`, evitando redundância e divergência entre fontes. |
+| DT-04 | Manter `partidas.status` como `VARCHAR(30)`, não `ENUM`. | A API pode introduzir estados novos; o armazenamento deve preservar estados externos desconhecidos. |
+| DT-05 | Manter `usuarios.clube_favorito_id` nullable, com FK `ON DELETE SET NULL`. | O RF04 permite perfil sem clube favorito; excluir um clube não deve excluir o usuário. |
+| DT-06 | Manter `clubes_temporadas.probabilidades_calculadas_em` como nome canônico. | É o nome adotado pelo schema implementado no PR #49. SQL executável deve usar `_em`; `_on` é apenas referência histórica ao erro corrigido. |
+| DT-07 | Manter o nome do banco `brasileirao_risco`. | É o nome adotado desde o PR #38. Renomear exigiria plano de migração coordenado entre ambientes. |
+| DT-08 | Manter `external_id` obrigatório e único nas entidades integradas à football-data.org. | O identificador externo é a chave de integração; registros sem identificador válido devem ser rejeitados/adiados, nunca relacionados por nome ou sigla. |
+| DT-09 | Manter em `temporadas` os campos de integração `external_id`, `competicao_id`, ano, datas, rodada e `api_updated_at`. | São necessários ao mapeamento e à sincronização da football-data.org. |
+| DT-10 | Manter `clubes.sigla` como `VARCHAR(10)`, indexada e não única. | Siglas podem se repetir e o modelo não deve impor unicidade nem limitar artificialmente o comprimento a três caracteres. |
+| DT-11 | Manter a ausência de `clubes.cor_primaria`. | O campo não integra o contrato de dados aprovado; uma necessidade futura deverá ser tratada em mudança específica. |
+| DT-12 | Manter `partidas.data_hora_utc` como `DATETIME NOT NULL`, com o nome atual. | O mapeamento da fonte considera `utcDate` obrigatório. Payload sem esse campo deve ser rejeitado/adiado, sem inventar data ou gravar NULL. |
+| DT-13 | Manter gols de partidas como `INT NULL` (incluindo placares do intervalo). | A ausência de placar deve continuar representada por NULL; não converter indisponibilidade em zero. |
+| DT-14 | Manter a ausência de `partidas.minuto_jogo`. | O campo não é necessário ao contrato atual do MVP; inclusão futura exige requisito e origem de dado definidos. |
+| DT-15 | Manter a estrutura ampliada de `sync_logs` documentada neste dicionário. | Os campos e estados dão suporte ao acompanhamento operacional das sincronizações e ao diagnóstico de falhas. |
+| DT-16 | Manter as regras CASCADE documentadas para FKs de partidas, `clubes_temporadas` e `simulacoes_usuarios`. | As regras refletem a política de dependência dos registros relacionados e o comportamento de exclusão definido para o MVP. |
+| DT-17 | Manter `temporadas.competicao_id → competicoes.id` com `ON DELETE RESTRICT` e `ON UPDATE RESTRICT`. | Política aprovada expressamente na Issue #1: impedir exclusão/alteração de uma competição enquanto houver temporadas referenciando-a. |
+
+### Registro de aprovação e limites
+
+- A aprovação foi registrada na Issue #1 e confirma as escolhas acima como contrato vigente do projeto.
+- A aprovação não autoriza apagar dados, alterar tipos automaticamente ou executar DDL destrutivo em bancos persistentes.
+- `database/schema.sql` define a criação de bancos novos; `database/migrations/001_alinhar_schema_mvp.sql` alinha bancos legados compatíveis com o escopo documentado.
+- Mudanças futuras em qualquer decisão desta seção exigem revisão de impacto, atualização do dicionário/schema/migrations, testes correspondentes e registro explícito no PR e nas issues afetadas.
+- Divergências ilustrativas da DDL v2.1 que não estejam reproduzidas como pendências nesta seção não devem ser reabertas por interpretação isolada da DDL antiga; este contrato aprovado prevalece para a implementação atual.
 
 ---
 
