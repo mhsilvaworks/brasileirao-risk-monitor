@@ -10,6 +10,6 @@ final class CiFailureDemoTest extends TestCase
 {
     public function testDemonstracaoDeFalhaControlada(): void
     {
-        self::assertSame('ARENA_', 'ARENA');
+        self::assertSame('ARENA', 'ARENA');
     }
 }
