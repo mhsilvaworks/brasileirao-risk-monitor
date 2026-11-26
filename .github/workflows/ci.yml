@@ -1,0 +1,42 @@
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Validar aplicação PHP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, json, pdo_sqlite
+          coverage: none
+
+      - name: Instalar dependências
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Validar sintaxe PHP
+        run: |
+          find . \
+            -path './.git' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 |
+            xargs -0 -r -n1 php -l
+
+      - name: Executar testes PHPUnit
+        run: composer test
+
+      - name: Auditar dependências
+        run: composer audit
