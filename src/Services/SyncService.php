@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use PDO;
 use RuntimeException;
 use Throwable;
+use App\Repositories\SyncLogRepository;
 
 /**
  * Orquestra a sincronização idempotente de dados da football-data.org
@@ -25,20 +26,25 @@ class SyncService
     private PDO $pdo;
     private DataProviderInterface $dataProvider;
     private ClubeRepository $clubeRepository;
+    private SyncLogRepository $syncLogRepository;
+    private Logger $logger;
 
     /** @var callable|null */
-    private $logger;
+    private $legacyLogger;
 
     public function __construct(
         PDO $pdo,
         DataProviderInterface $dataProvider,
         ?ClubeRepository $clubeRepository = null,
-        ?callable $logger = null
+        ?callable $logger = null,
+        ?SyncLogRepository $syncLogRepository = null
     ) {
         $this->pdo = $pdo;
         $this->dataProvider = $dataProvider;
         $this->clubeRepository = $clubeRepository ?? new ClubeRepository($pdo);
-        $this->logger = $logger;
+        $this->syncLogRepository = $syncLogRepository ?? new SyncLogRepository($pdo);
+        $this->logger = new Logger();
+        $this->legacyLogger = $logger;
     }
 
     /**
@@ -185,24 +191,49 @@ class SyncService
                 'registros_processados' => $registrosProcessados,
                 'duracao_ms' => $duracaoMs,
             ];
+
         } catch (Throwable $exception) {
             $duracaoMs = $this->calculateDurationMs($inicioMicro);
+
+            $mensagemErro = $this->logger->sanitizeString(
+                $exception->getMessage()
+            );
+
             $detalhes['erro'] = [
                 'tipo' => $exception::class,
-                'mensagem' => $exception->getMessage(),
+                'mensagem' => $mensagemErro,
             ];
 
             if ($exception instanceof ApiRequestException) {
                 $detalhes['erro']['http_status'] = $exception->getHttpStatus();
-                $detalhes['erro']['request_counter_reset'] = $exception->getRequestCounterReset();
+                $detalhes['erro']['request_counter_reset'] =
+                    $exception->getRequestCounterReset();
             }
 
-            $mensagemErro = $this->truncateMessage($exception->getMessage(), 500);
-            $this->finalizarSyncLog($logId, 'failed', $mensagemErro, $registrosProcessados, $duracaoMs, $detalhes);
+            try {
+                $this->finalizarSyncLog(
+                    $logId,
+                    'failed',
+                    $mensagemErro,
+                    $registrosProcessados,
+                    $duracaoMs,
+                    $detalhes
+                );
+            } catch (Throwable $logException) {
+                $this->logError(
+                    'Não foi possível finalizar o registro da sincronização.',
+                    [
+                        'sync_log_id' => $logId,
+                        'erro_log' => $logException->getMessage(),
+                    ]
+                );
+            }
+
             $this->logError($mensagemErro, $detalhes);
 
             throw $exception;
         }
+
     }
 
     /**
@@ -446,42 +477,24 @@ class SyncService
         return $clube !== null ? (int) $clube['id'] : null;
     }
 
+
     /**
      * @param array<string, mixed> $detalhes
      */
-    private function iniciarSyncLog(string $tipo, DateTimeImmutable $iniciadoEm, array $detalhes): int
-    {
-        $sql = 'INSERT INTO sync_logs (
-                    tipo,
-                    status,
-                    mensagem,
-                    registros_processados,
-                    iniciado_em,
-                    finalizado_em,
-                    duracao_ms,
-                    detalhes_json
-                ) VALUES (
-                    :tipo,
-                    :status,
-                    :mensagem,
-                    0,
-                    :iniciado_em,
-                    NULL,
-                    NULL,
-                    :detalhes_json
-                )';
+    private function iniciarSyncLog(
+        string $tipo,
+        DateTimeImmutable $iniciadoEm,
+        array $detalhes
+    ): int {
+        $detalhesSeguros = $this->logger->sanitizeContext($detalhes);
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':tipo' => $tipo,
-            ':status' => 'running',
-            ':mensagem' => 'Sincronização em andamento.',
-            ':iniciado_em' => $iniciadoEm->format('Y-m-d H:i:s'),
-            ':detalhes_json' => json_encode($detalhes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        return $this->syncLogRepository->create([
+            'tipo' => $tipo,
+            'iniciado_em' => $iniciadoEm,
+            'detalhes' => $detalhesSeguros,
         ]);
-
-        return (int) $this->pdo->lastInsertId();
     }
+
 
     /**
      * @param array<string, mixed> $detalhes
@@ -498,26 +511,15 @@ class SyncService
             return;
         }
 
-        $finalizadoEm = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $mensagemSegura = $this->logger->sanitizeString($mensagem);
+        $detalhesSeguros = $this->logger->sanitizeContext($detalhes);
 
-        $sql = 'UPDATE sync_logs
-                   SET status = :status,
-                       mensagem = :mensagem,
-                       registros_processados = :registros_processados,
-                       finalizado_em = :finalizado_em,
-                       duracao_ms = :duracao_ms,
-                       detalhes_json = :detalhes_json
-                 WHERE id = :id';
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':status' => $status,
-            ':mensagem' => $this->truncateMessage($mensagem, 500),
-            ':registros_processados' => max(0, $registrosProcessados),
-            ':finalizado_em' => $finalizadoEm,
-            ':duracao_ms' => max(0, $duracaoMs),
-            ':detalhes_json' => json_encode($detalhes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            ':id' => $logId,
+        $this->syncLogRepository->finish($logId, [
+            'status' => $status,
+            'mensagem' => $mensagemSegura,
+            'registros_processados' => $registrosProcessados,
+            'duracao_ms' => $duracaoMs,
+            'detalhes' => $detalhesSeguros,
         ]);
     }
 
@@ -554,18 +556,32 @@ class SyncService
      */
     private function logInfo(string $message, array $context = []): void
     {
-        if ($this->logger !== null) {
-            ($this->logger)('info', $message, $context);
+        $this->logger->info($message, $context);
+
+        if ($this->legacyLogger !== null) {
+            ($this->legacyLogger)(
+                'info',
+                $this->logger->sanitizeString($message),
+                $this->logger->sanitizeContext($context)
+            );
         }
     }
+
 
     /**
      * @param array<string, mixed> $context
      */
     private function logError(string $message, array $context = []): void
     {
-        if ($this->logger !== null) {
-            ($this->logger)('error', $message, $context);
+        $this->logger->error($message, $context);
+
+        if ($this->legacyLogger !== null) {
+            ($this->legacyLogger)(
+                'error',
+                $this->logger->sanitizeString($message),
+                $this->logger->sanitizeContext($context)
+            );
         }
     }
+
 }
