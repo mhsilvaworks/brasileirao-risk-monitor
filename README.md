@@ -17,6 +17,50 @@ docker run -d \
   brasileirao-risk-monitor:latest
 ```
 
+### Imagem publicada no GitHub Container Registry (GHCR)
+
+A imagem também é publicada automaticamente no GitHub Container Registry após a integração de alterações na branch `main`, desde que os testes da CI sejam aprovados.
+
+Imagem:
+
+```text
+ghcr.io/mhsilvaworks/brasileirao-risk-monitor
+```
+
+Tags disponíveis:
+- `latest`: versão mais recente publicada.
+- `sha-8f4ee529080c8eb291674f4fe05ce276003e63e2`: imagem associada ao commit da publicação.
+
+Para baixar a imagem:
+
+```bash
+docker pull ghcr.io/mhsilvaworks/brasileirao-risk-monitor:latest
+```
+
+Para executar um container utilizando a imagem publicada:
+
+```bash
+docker run -d \
+  --name brasileirao-risk-monitor \
+  -p 8083:80 \
+  ghcr.io/mhsilvaworks/brasileirao-risk-monitor:latest
+```
+
+Digest verificado na publicação:
+
+```text
+sha256:52c1d7dd7c7c99292346e8e001705577011fc39cc873680e2d66540c94f2cf4e
+```
+
+Para executar um container a partir da imagem local:
+
+```bash
+docker run -d \
+  --name brasileirao-risk-monitor \
+  -p 8083:80 \
+  brasileirao-risk-monitor:latest
+```
+
 Para verificar o estado do container:
 
 ```bash
