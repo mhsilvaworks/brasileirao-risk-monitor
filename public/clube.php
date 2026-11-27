@@ -12,6 +12,7 @@ use App\Repositories\UsuarioRepository;
 use App\Security\SessionGuard;
 use App\Services\AuthService;
 use App\Services\ProbabilidadeService;
+use App\Services\StandingsService;
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
@@ -23,6 +24,7 @@ $temporada = null;
 $clubes = [];
 $clubeSelecionado = null;
 $probabilidades = null;
+$classificacaoClube = null;
 $estado = 'indisponivel';
 $mensagemEstado = '';
 $erroConsulta = false;
@@ -95,6 +97,12 @@ try {
                     (int) $clubeSelecionado['id']
                 );
 
+                foreach ((new StandingsService($pdo))->getStandingsByTemporada((int) $temporada['id']) as $linha) {
+                    if ($linha['clube_id'] === (int) $clubeSelecionado['id']) {
+                        $classificacaoClube = $linha;
+                        break;
+                    }
+                }
                 $estado = 'disponivel';
             }
         }
@@ -147,6 +155,10 @@ $probabilidadesPorPosicao = is_array($probabilidades['probabilidades_posicoes'] 
     ? $probabilidades['probabilidades_posicoes']
     : [];
 
+$posicaoSelecionada = filter_input(INPUT_GET, 'posicao', FILTER_VALIDATE_INT, [
+    'options' => ['min_range' => 1, 'max_range' => 20],
+]) ?: ($classificacaoClube['posicao'] ?? 1);
+
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -167,30 +179,7 @@ $probabilidadesPorPosicao = is_array($probabilidades['probabilidades_posicoes'] 
             <p>Probabilidades estimadas a partir dos dados estatísticos persistidos.</p>
         </header>
 
-        <form class="club-picker" method="GET" action="/clube.php">
-            <label for="clube_id">CLUBE ANALISADO</label>
-            <select id="clube_id" name="clube_id">
-                <option value="">Selecione um clube</option>
-                <?php foreach ($clubes as $clube): ?>
-                    <option value="<?= (int) $clube['id'] ?>"
-                        <?= $clubeSelecionado !== null
-                            && (int) $clubeSelecionado['id'] === (int) $clube['id']
-                                ? 'selected'
-                                : '' ?>>
-                        <?= $escapar((string) ($clube['nome_curto'] ?: $clube['nome'])) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <button type="submit">VER CLUBE</button>
-        </form>
-
-        <?php if ($estado !== 'disponivel'): ?>
-            <p class="club-state" role="status">
-                <?= $escapar($mensagemEstado !== ''
-                    ? $mensagemEstado
-                    : 'Os dados deste clube não estão disponíveis.') ?>
-            </p>
-        <?php else: ?>
+        <?php if ($estado === 'disponivel'): ?>
             <section class="club-summary" aria-label="Clube selecionado">
                 <?php if (is_string($clubeSelecionado['escudo_url'] ?? null)
                     && $clubeSelecionado['escudo_url'] !== ''): ?>
@@ -201,11 +190,50 @@ $probabilidadesPorPosicao = is_array($probabilidades['probabilidades_posicoes'] 
                     <p>TEMPORADA <?= (int) $temporada['ano'] ?></p>
                     <h2><?= $escapar((string) ($clubeSelecionado['nome'] ?? 'Clube')) ?></h2>
                 </div>
+        <?php endif; ?>
+            <form class="club-picker" method="GET" action="/clube.php">
+                <label for="clube_id">CLUBE ANALISADO</label>
+                <select id="clube_id" name="clube_id">
+                    <option value="">Selecione um clube</option>
+                    <?php foreach ($clubes as $clube): ?>
+                        <option value="<?= (int) $clube['id'] ?>"
+                            <?= $clubeSelecionado !== null
+                                && (int) $clubeSelecionado['id'] === (int) $clube['id']
+                                    ? 'selected'
+                                    : '' ?>>
+                            <?= $escapar((string) ($clube['nome_curto'] ?: $clube['nome'])) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit">VER CLUBE</button>
+            </form>
+        <?php if ($estado === 'disponivel'): ?>
+                <?php if ($classificacaoClube !== null): ?>
+                    <dl class="club-stats">
+                        <?php foreach ([
+                            'Pts' => $classificacaoClube['pontos'],
+                            'Pos' => $classificacaoClube['posicao'] . 'º',
+                            'Saldo' => sprintf('%+d', $classificacaoClube['saldo_gols']),
+                            'Jogos rest.' => max(0, 2 * (count($clubes) - 1) - $classificacaoClube['jogos']),
+                            'Aproveit.' => number_format($classificacaoClube['aproveitamento'], 1, ',', '.') . '%',
+                        ] as $rotulo => $valor): ?>
+                            <div><dt><?= $escapar($rotulo) ?></dt><dd><?= $escapar((string) $valor) ?></dd></div>
+                        <?php endforeach; ?>
+                    </dl>
+                <?php endif; ?>
             </section>
+        <?php endif; ?>
 
+        <?php if ($estado !== 'disponivel'): ?>
+            <p class="club-state" role="status">
+                <?= $escapar($mensagemEstado !== ''
+                    ? $mensagemEstado
+                    : 'Os dados deste clube não estão disponíveis.') ?>
+            </p>
+        <?php else: ?>
             <?php if (!($probabilidades['disponivel'] ?? false)): ?>
                 <p class="club-state" role="status">
-                    Ainda não há probabilidades calculadas para este clube. Os dados oficiais permanecem indisponíveis.
+                    Ainda não há probabilidades calculadas para este clube.
                 </p>
             <?php else: ?>
                 <section class="probability-section" aria-labelledby="probability-title">
@@ -215,14 +243,18 @@ $probabilidadesPorPosicao = is_array($probabilidades['probabilidades_posicoes'] 
                     </div>
                     <div class="probability-grid">
                         <?php foreach ([
-                            'probabilidade_campeao' => 'Campeão',
                             'probabilidade_libertadores' => 'Libertadores',
                             'probabilidade_sulamericana' => 'Sul-Americana',
                             'probabilidade_rebaixamento' => 'Rebaixamento',
+                            'probabilidade_campeao' => 'Campeão',
                         ] as $campo => $rotulo): ?>
-                            <article class="probability-card">
+                            <article class="probability-card <?= $escapar($campo) ?>">
                                 <h3><?= $escapar($rotulo) ?></h3>
                                 <p><?= $escapar($formatarProbabilidade($probabilidades[$campo] ?? null)) ?></p>
+                                <?php if (isset($probabilidades[$campo])): ?>
+                                    <meter min="0" max="100" value="<?= (float) $probabilidades[$campo] ?>"
+                                           aria-label="<?= $escapar($rotulo) ?>"></meter>
+                                <?php endif; ?>
                             </article>
                         <?php endforeach; ?>
                     </div>
@@ -230,18 +262,36 @@ $probabilidadesPorPosicao = is_array($probabilidades['probabilidades_posicoes'] 
 
                 <section class="positions-section" aria-labelledby="positions-title">
                     <div class="club-section-heading">
-                        <h2 id="positions-title">DISTRIBUIÇÃO DE POSIÇÕES</h2>
-                        <p>Probabilidade estimada de terminar em cada posição</p>
+                        <h2 id="positions-title">POSIÇÃO FINAL</h2>
+                        <form method="get" action="/clube.php">
+                            <input type="hidden" name="clube_id" value="<?= (int) $clubeSelecionado['id'] ?>">
+                            <label for="posicao">Ver posição</label>
+                            <select id="posicao" name="posicao">
+                                <?php for ($i = 1; $i <= 20; $i++): ?>
+                                    <option value="<?= $i ?>" <?= $posicaoSelecionada === $i ? 'selected' : '' ?>>
+                                        <?= $i ?>º lugar
+                                    </option>
+                                <?php endfor; ?>
+                            </select>
+                            <button type="submit">Ver</button>
+                        </form>
+                        <p><strong><?= $escapar($formatarProbabilidade($probabilidadesPorPosicao[$posicaoSelecionada] ?? null)) ?></strong>
+                           de terminar em <?= $posicaoSelecionada ?>º lugar</p>
                     </div>
                     <div class="positions-grid">
                         <?php for ($posicao = 1; $posicao <= 20; $posicao++): ?>
                             <?php $valor = $probabilidadesPorPosicao[(string) $posicao]
                                 ?? $probabilidadesPorPosicao[$posicao]
                                 ?? null; ?>
-                            <div class="position-probability">
+                            <a class="position-probability" href="?clube_id=<?= (int) $clubeSelecionado['id'] ?>&amp;posicao=<?= $posicao ?>"
+                               <?= $posicao === $posicaoSelecionada ? 'aria-current="true"' : '' ?>>
                                 <span><?= $posicao ?>º</span>
                                 <strong><?= $escapar($formatarProbabilidade($valor)) ?></strong>
-                            </div>
+                                <?php if ($valor !== null): ?>
+                                    <meter min="0" max="100" value="<?= (float) $valor ?>"
+                                           aria-label="Chance de terminar em <?= $posicao ?>º"></meter>
+                                <?php endif; ?>
+                            </a>
                         <?php endfor; ?>
                     </div>
                     <?php if (is_string($probabilidades['probabilidades_calculadas_em'] ?? null)): ?>

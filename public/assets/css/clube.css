@@ -62,9 +62,9 @@
 .club-summary p { margin: 0; color: var(--color-muted); font-family: var(--font-display); font-size: 8px; }
 .club-summary h2 { margin: 6px 0 0; font-size: 16px; }
 
-.probability-section,
-.positions-section,
-
+.probability-section { margin-bottom: 16px; }
+.positions-section { padding: 16px; background: var(--color-surface); border: 2px solid var(--color-border); box-shadow: 3px 3px 0 var(--color-border); }
+.club-section-heading { margin-bottom: 14px; }
 .club-section-heading { margin-bottom: 14px; }
 .club-section-heading h2 { margin: 0; font-size: 11px; font-weight: 400; }
 .club-section-heading p { margin: 6px 0 0; color: var(--color-brand); font-size: 14px; }
@@ -117,4 +117,29 @@
     .club-picker label { flex-basis: auto; }
     .probability-grid { grid-template-columns: 1fr 1fr; }
     .positions-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.club-summary { flex-wrap: wrap; }
+.club-summary .club-picker { margin: 0 0 0 auto; padding: 0; border: 0; }
+.club-stats { display: flex; flex-wrap: wrap; justify-content: space-between; width: 100%; gap: 12px; margin: 0; }
+.club-stats div { display: grid; gap: 6px; }
+.club-stats dt { order: 1; color: var(--color-brand); font-size: 12px; }
+.club-stats dd { margin: 0; font-family: var(--font-display); font-size: 12px; }
+.probability-card { --accent: var(--color-success); border-top: 4px solid var(--accent); text-align: left; }
+.probability-card.probabilidade_sulamericana { --accent: var(--color-info); }
+.probability-card.probabilidade_rebaixamento { --accent: var(--color-danger); }
+.probability-card.probabilidade_campeao { --accent: var(--color-warning); }
+.probability-card p { font-size: clamp(14px, 2.3vw, 25px); }
+.probability-card meter, .position-probability meter { width: 100%; accent-color: var(--accent, var(--color-success)); }
+.club-content meter::-webkit-meter-optimum-value { background: var(--accent, var(--color-success)); }
+.club-content meter::-moz-meter-bar { background: var(--accent, var(--color-success)); }
+.positions-section .club-section-heading { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.positions-section .club-section-heading p { flex-basis: 100%; }
+.positions-section select, .positions-section button { background: var(--color-input); border: 1px solid var(--color-border); padding: 5px; }
+.position-probability { color: var(--color-text); text-decoration: none; }
+.position-probability[aria-current] { color: var(--color-surface); background: var(--color-brand); }
+.position-probability[aria-current] span { color: inherit; }
+
+@media (min-width: 1180px) {
+    .positions-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); }
 }
