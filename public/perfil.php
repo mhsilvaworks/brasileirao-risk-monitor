@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Database;
 use App\Repositories\UsuarioRepository;
 use App\Repositories\ClubeRepository;
+use App\Repositories\PartidaRepository;
+use App\Repositories\SyncLogRepository;
 use App\Security\CsrfToken;
 use App\Security\SessionGuard;
 use App\Services\AuthService;
@@ -22,6 +24,11 @@ $erro = '';
 $sucesso = '';
 $usuario = null;
 $clubes = [];
+$clubeFavorito = null;
+$partidasAoVivo = [];
+$ultimaSincronizacao = null;
+$consultaSidebarIndisponivel = false;
+$consultaSincronizacaoIndisponivel = false;
 
 // Recupera um campo enviado pelo formulário.
 function campoPost(string $campo): string
@@ -43,6 +50,8 @@ try {
 
     $usuarioRepository = new UsuarioRepository($pdo);
     $clubeRepository = new ClubeRepository($pdo);
+    $partidaRepository = new PartidaRepository($pdo);
+    $syncLogRepository = new SyncLogRepository($pdo);
 
     $authService = new AuthService(
         $usuarioRepository,
@@ -197,6 +206,34 @@ try {
     // Não expõe informações internas do sistema.
     http_response_code(500);
     $erro = 'Não foi possível concluir a operação.';
+}
+
+// Prepara os dados dos componentes depois de reler o perfil, inclusive após salvá-lo.
+if ($usuario !== null) {
+    try {
+        $clubeFavoritoId = $usuario['clube_favorito_id'] ?? null;
+
+        if ($clubeFavoritoId !== null) {
+            $clubeFavorito = $clubeRepository->findById((int) $clubeFavoritoId);
+
+            if ($clubeFavorito !== null) {
+                $partidasAoVivo = $partidaRepository->findLiveByClub(
+                    (int) $clubeFavorito['id']
+                );
+            }
+        }
+
+    } catch (Throwable $e) {
+        // Uma falha no placar não impede a consulta independente do footer.
+        $consultaSidebarIndisponivel = true;
+        $partidasAoVivo = [];
+    }
+
+    try {
+        $ultimaSincronizacao = $syncLogRepository->findLastSuccessful();
+    } catch (Throwable $e) {
+        $consultaSincronizacaoIndisponivel = true;
+    }
 }
 
 // 5. Recupera o token utilizado pelos formulários.
@@ -602,6 +639,8 @@ $csrfToken = CsrfToken::generate();
             <?php endif; ?>
 
         </main>
+
+        <?php require __DIR__ . '/partials/footer.php'; ?>
 
     </div>
 

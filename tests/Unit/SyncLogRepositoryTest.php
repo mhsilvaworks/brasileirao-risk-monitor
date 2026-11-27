@@ -188,4 +188,37 @@ class SyncLogRepositoryTest extends TestCase
 
         $this->assertSame(1, $total);
     }
+
+    public function testBuscaUltimaSincronizacaoCompletaBemSucedida(): void
+    {
+        $pdo = $this->createSqliteSchema();
+        $pdo->exec("INSERT INTO sync_logs
+            (id, tipo, status, iniciado_em, finalizado_em) VALUES
+            (1, 'sincronizacao', 'success', '2026-11-25 10:00:00', '2026-11-25 10:01:00'),
+            (2, 'sincronizacao', 'failed', '2026-11-26 10:00:00', '2026-11-26 10:01:00'),
+            (3, 'partidas', 'success', '2026-11-26 11:00:00', '2026-11-26 11:01:00'),
+            (4, 'sincronizacao', 'partial', '2026-11-26 12:00:00', '2026-11-26 12:01:00'),
+            (5, 'sincronizacao', 'success', '2026-11-27 10:00:00', NULL),
+            (6, 'sincronizacao', 'success', '2026-11-26 10:00:00', '2026-11-26 10:01:00')");
+
+        $repository = new SyncLogRepository($pdo);
+
+        $this->assertSame([
+            'id' => 6,
+            'finalizado_em' => '2026-11-26 10:01:00',
+        ], $repository->findLastSuccessful());
+    }
+
+    public function testRetornaNullQuandoNaoHaSincronizacaoBemSucedida(): void
+    {
+        $pdo = $this->createSqliteSchema();
+        $pdo->exec("INSERT INTO sync_logs
+            (tipo, status, iniciado_em, finalizado_em) VALUES
+            ('sincronizacao', 'failed', '2026-11-26 10:00:00', '2026-11-26 10:01:00'),
+            ('sincronizacao', 'running', '2026-11-27 10:00:00', NULL)");
+
+        $repository = new SyncLogRepository($pdo);
+
+        $this->assertNull($repository->findLastSuccessful());
+    }
 }
