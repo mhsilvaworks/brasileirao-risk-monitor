@@ -23,6 +23,33 @@ class SyncLogRepository
     }
 
     /**
+     * Retorna a última sincronização completa finalizada com sucesso.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findLastSuccessful(): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT id, finalizado_em
+               FROM sync_logs
+              WHERE tipo = :tipo
+                AND status = :status
+                AND finalizado_em IS NOT NULL
+              ORDER BY finalizado_em DESC, id DESC
+              LIMIT 1"
+        );
+
+        $stmt->execute([
+            ':tipo' => 'sincronizacao',
+            ':status' => 'success',
+        ]);
+
+        $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $resultado === false ? null : $resultado;
+    }
+
+    /**
      * Cria um registro de sincronização em andamento.
      *
      * @param array<string, mixed> $log

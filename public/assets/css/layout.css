@@ -70,6 +70,11 @@
     background: rgba(255, 255, 255, 0.08);
 }
 
+.sidebar-link.is-disabled {
+    cursor: default;
+    opacity: 0.62;
+}
+
 .sidebar-number {
     font-family: var(--font-display);
     font-size: 9px;
@@ -96,6 +101,25 @@
     margin-top: auto;
 }
 
+.favorite-club {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-family: var(--font-display);
+    font-size: 8px;
+    line-height: 1.6;
+}
+
+.favorite-club strong {
+    font-family: var(--font-body);
+    font-size: 16px;
+}
+
+.sidebar-feedback {
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 .live-score {
     margin-bottom: 40px;
     border: 2px solid var(--color-surface);
@@ -119,6 +143,7 @@
     padding: 12px;
     background: var(--color-brand);
     font-size: 12px;
+    line-height: 1.5;
 }
 
 /* Identificação da temporada */
@@ -134,6 +159,21 @@
 .app-content {
     min-width: 0;
     padding: 32px 40px;
+}
+
+.app-footer {
+    grid-column: 2;
+    display: flex;
+    align-items: end;
+    justify-content: end;
+    padding: 0 40px 24px;
+    color: var(--color-muted);
+    font-size: 12px;
+    text-align: right;
+}
+
+.app-footer p {
+    margin: 0;
 }
 
 /* Layout responsivo */
@@ -161,7 +201,26 @@
     }
 
     .sidebar-bottom {
-        display: none;
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .favorite-club,
+    .live-score {
+        margin-bottom: 0;
+    }
+
+    .live-score-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .app-footer {
+        grid-column: 1;
+        padding: 0 16px 20px;
     }
 
     .app-content {

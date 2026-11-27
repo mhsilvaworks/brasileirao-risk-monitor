@@ -7,8 +7,17 @@ use App\Security\CsrfToken;
 // Identifica a página atual para destacar o item do menu.
 $paginaAtual = basename($_SERVER['SCRIPT_NAME'] ?? '');
 
+// A página da Issue #15 ainda não existe na main.
+$dashboardDisponivel = is_file(__DIR__ . '/../dashboard.php');
+
 // Recupera o token de segurança utilizado no logout.
 $tokenLogout = CsrfToken::generate();
+
+$escaparSidebar = static fn (string $valor): string => htmlspecialchars(
+    $valor,
+    ENT_QUOTES,
+    'UTF-8'
+);
 
 ?>
 
@@ -23,13 +32,17 @@ $tokenLogout = CsrfToken::generate();
     <!-- Menu de navegação -->
     <nav class="sidebar-nav" aria-label="Menu principal">
 
-        <!-- Dashboard: será integrado na Issue #15 -->
-        <span class="sidebar-link" aria-disabled="true">
+        <?php if ($dashboardDisponivel): ?>
+            <a href="/dashboard.php"
+               class="sidebar-link <?= $paginaAtual === 'dashboard.php' ? 'active' : '' ?>"
+               <?= $paginaAtual === 'dashboard.php' ? 'aria-current="page"' : '' ?>>
+        <?php else: ?>
+            <span class="sidebar-link is-disabled" aria-disabled="true">
+        <?php endif; ?>
             <span class="sidebar-number">01</span>
             Visão geral
-        </span>
+        <?php if ($dashboardDisponivel): ?></a><?php else: ?></span><?php endif; ?>
 
-        <!-- Página de perfil -->
         <a href="/perfil.php"
            class="sidebar-link <?= $paginaAtual === 'perfil.php' ? 'active' : '' ?>"
            <?= $paginaAtual === 'perfil.php' ? 'aria-current="page"' : '' ?>>
@@ -54,28 +67,62 @@ $tokenLogout = CsrfToken::generate();
 
     </nav>
 
-    <!-- Parte inferior da sidebar -->
+    <!-- Clube favorito e placar persistido, quando houver partida ao vivo -->
     <div class="sidebar-bottom">
 
-        <!-- Espaço reservado para futuras partidas ao vivo -->
-        <section class="live-score">
+        <?php if ($consultaSidebarIndisponivel ?? false): ?>
+            <p class="sidebar-feedback" role="status">
+                Não foi possível consultar o clube favorito agora.
+            </p>
+        <?php elseif (is_array($clubeFavorito ?? null)): ?>
+            <section class="favorite-club" aria-label="Clube favorito">
+                <span>SEU CLUBE</span>
+                <strong><?= $escaparSidebar((string) $clubeFavorito['nome']) ?></strong>
+            </section>
+        <?php endif; ?>
 
-            <div class="live-score-header">
-                AO VIVO
-            </div>
+        <?php foreach (($partidasAoVivo ?? []) as $partida): ?>
+            <?php
+            $statusPartida = (string) ($partida['status'] ?? '');
+            if (!in_array($statusPartida, ['IN_PLAY', 'PAUSED'], true)) {
+                continue;
+            }
 
-            <div class="live-score-content">
-                Placar indisponível
-            </div>
+            $dataAtualizacao = $partida['api_updated_at'] ?? null;
+            ?>
+            <section class="live-score" aria-label="Partida do clube favorito">
+                <div class="live-score-header">
+                    ÚLTIMO STATUS:
+                    <?= $statusPartida === 'PAUSED' ? 'EM PAUSA' : 'AO VIVO' ?>
+                </div>
 
-            <div class="live-score-footer">
-                Aguardando integração
-            </div>
+                <div class="live-score-content">
+                    <span><?= $escaparSidebar((string) $partida['mandante_nome']) ?></span>
+                    <strong>
+                        <?= $partida['gols_mandante'] === null
+                            ? '—'
+                            : (int) $partida['gols_mandante'] ?>
+                        :
+                        <?= $partida['gols_visitante'] === null
+                            ? '—'
+                            : (int) $partida['gols_visitante'] ?>
+                    </strong>
+                    <span><?= $escaparSidebar((string) $partida['visitante_nome']) ?></span>
+                </div>
 
-        </section>
+                <div class="live-score-footer">
+                    <?php if (is_string($dataAtualizacao) && $dataAtualizacao !== ''): ?>
+                        Dado da API atualizado em
+                        <?= $escaparSidebar($dataAtualizacao) ?> UTC
+                    <?php else: ?>
+                        Horário de atualização da API indisponível
+                    <?php endif; ?>
+                </div>
+            </section>
+        <?php endforeach; ?>
 
         <div class="sidebar-season">
-            TEMPORADA 2026
+            SÉRIE A
         </div>
 
     </div>
