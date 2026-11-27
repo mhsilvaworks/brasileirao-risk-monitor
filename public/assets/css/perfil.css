@@ -1,0 +1,295 @@
+@import url('./layout.css');
+
+/* ========================================
+   CABEÇALHO DA PÁGINA
+   ======================================== */
+
+.profile-header {
+    margin-bottom: 28px;
+}
+
+.profile-breadcrumb {
+    margin: 0 0 12px;
+    color: var(--color-brand);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.profile-header h1 {
+    margin: 0 0 12px;
+    font-size: 24px;
+    font-weight: 400;
+}
+
+.profile-description {
+    margin: 0;
+    color: var(--color-brand);
+    font-size: 15px;
+}
+
+/* ========================================
+   CARTÕES DO PERFIL
+   ======================================== */
+
+.profile-card {
+    margin-bottom: 24px;
+    padding: 24px;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    box-shadow: 3px 3px 0 var(--color-border);
+}
+
+.profile-card h2 {
+    margin: 0 0 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* ========================================
+   FORMULÁRIO DE DADOS DO TORCEDOR
+   ======================================== */
+
+/* Organiza os campos em duas colunas. */
+
+.profile-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+/* Permite que um campo ocupe as duas colunas. */
+
+.full-width {
+    grid-column: 1 / -1;
+}
+
+.profile-form label,
+.modal-form label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* Estilo compartilhado dos campos. */
+
+.profile-input {
+    width: 100%;
+    min-height: 40px;
+    padding: 10px 12px;
+    background: var(--color-input);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 0;
+    font-size: 14px;
+}
+
+.profile-input::placeholder {
+    color: #77776d;
+}
+
+/* Botão que visualmente representa um campo de senha. */
+
+.password-trigger {
+    text-align: left;
+    color: #77776d;
+}
+
+.password-trigger:hover {
+    background: #f3eddb;
+}
+
+/* ========================================
+   BOTÕES DE AÇÃO
+   ======================================== */
+
+.profile-button {
+    min-height: 42px;
+    padding: 12px 24px;
+    background: var(--color-primary);
+    color: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 0;
+    box-shadow: var(--shadow);
+    font-family: var(--font-display);
+    font-size: 8px;
+    line-height: 1.8;
+}
+
+.profile-button:hover {
+    background: var(--color-primary-hover);
+}
+
+.profile-button:active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0 var(--color-border);
+}
+
+/* Área do botão de salvar e do link de e-mail. */
+
+.profile-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.text-button {
+    padding: 0;
+    background: transparent;
+    color: var(--color-brand);
+    border: none;
+    text-decoration: underline;
+    font-size: 13px;
+}
+
+/* ========================================
+   ZONA DE PERIGO
+   ======================================== */
+
+.danger-zone {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    border-left: 5px solid var(--color-danger);
+}
+
+.danger-zone h2 {
+    margin: 0 0 12px;
+    padding: 0;
+    border: none;
+    color: var(--color-danger);
+    font-size: 11px;
+}
+
+.danger-zone p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.danger-zone .profile-button {
+    flex-shrink: 0;
+}
+
+/* ========================================
+   JANELAS MODAIS
+   ======================================== */
+
+.profile-modal {
+    width: calc(100% - 32px);
+    max-width: 440px;
+    max-height: calc(100vh - 32px);
+    padding: 24px;
+    overflow: auto;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
+    border-radius: 0;
+    box-shadow: var(--shadow);
+}
+
+/* Escurece o fundo enquanto a janela está aberta. */
+
+.profile-modal::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.profile-modal h2 {
+    margin: 0 0 24px;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.cancel-button {
+    min-height: 42px;
+    padding: 10px 16px;
+    background: var(--color-input);
+    color: var(--color-text);
+    border: 2px solid var(--color-border);
+}
+
+.confirmation-label {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+}
+
+.confirmation-label input {
+    accent-color: var(--color-danger);
+}
+
+/* ========================================
+   MENSAGENS DE ERRO E SUCESSO
+   ======================================== */
+
+.profile-message {
+    margin-bottom: 24px;
+    padding: 12px;
+    border: 2px solid;
+    font-size: 14px;
+}
+
+.profile-message[role="alert"] {
+    background: #fce0d8;
+    color: #8c2018;
+    border-color: var(--color-danger);
+}
+
+.profile-message[role="status"] {
+    background: #e0f2d8;
+    color: var(--color-brand);
+    border-color: var(--color-success);
+}
+
+/* ========================================
+   RESPONSIVIDADE
+   ======================================== */
+
+@media (max-width: 900px) {
+
+    .danger-zone {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 600px) {
+
+    .profile-form {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-card {
+        padding: 18px;
+    }
+
+    .profile-header h1 {
+        font-size: 18px;
+    }
+
+    .profile-button {
+        width: 100%;
+    }
+
+    .profile-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
