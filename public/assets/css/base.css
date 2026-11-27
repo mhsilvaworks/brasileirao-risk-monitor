@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto+Condensed:wght@400;500;600;700&display=swap');
+
+:root {
+    /* Identidade visual */
+    --color-background: #AFE48F;
+    --color-brand: #194F16;
+    --color-surface: #FFF0CA;
+    --color-primary: #B82D20;
+    --color-primary-hover: #962318;
+    --color-border: #171710;
+    --color-input: #FCF9F0;
+    --color-text: #171710;
+    --color-muted: #526348;
+
+    /* Estados */
+    --color-success: #238B45;
+    --color-warning: #E9AE38;
+    --color-danger: #B82D20;
+    --color-info: #2980B9;
+
+    /* Tipografia */
+    --font-display: 'Press Start 2P', monospace;
+    --font-body: 'Roboto Condensed', Arial, sans-serif;
+
+    /* Componentes */
+    --border-width: 2px;
+    --shadow: 4px 4px 0 var(--color-border);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--font-display);
+    line-height: 1.7;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+a {
+    color: inherit;
+}
+
+img {
+    max-width: 100%;
+}
+
+:focus-visible {
+    outline: 3px solid var(--color-brand);
+    outline-offset: 3px;
+}
+
+[hidden] {
+    display: none !important;
+}

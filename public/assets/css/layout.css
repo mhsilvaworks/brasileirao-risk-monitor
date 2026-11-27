@@ -1,0 +1,170 @@
+@import url('./base.css');
+
+/* Estrutura das páginas autenticadas */
+
+.app-layout {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+/* Barra lateral */
+
+.sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 32px 24px;
+    background: var(--color-brand);
+    color: var(--color-surface);
+}
+
+/* Identidade visual da marca */
+
+.sidebar-brand {
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--color-background);
+}
+
+.sidebar-brand h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -1px;
+}
+
+.sidebar-brand p {
+    margin: 14px 0 0;
+    font-family: var(--font-display);
+    font-size: 6px;
+}
+
+/* Menu de navegação */
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 30px;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    min-height: 44px;
+    padding: 12px;
+    border: 2px solid transparent;
+    border-left: 4px solid transparent;
+    background: transparent;
+    color: var(--color-surface);
+    text-decoration: none;
+    text-align: left;
+    font-size: 15px;
+}
+
+.sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-number {
+    font-family: var(--font-display);
+    font-size: 9px;
+    color: var(--color-background);
+}
+
+/* Item selecionado */
+
+.sidebar-link.active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+    border-left-color: var(--color-primary);
+    font-weight: 700;
+}
+
+.sidebar-link.active .sidebar-number {
+    color: var(--color-primary);
+}
+
+/* Área reservada para o placar ao vivo */
+
+.sidebar-bottom {
+    margin-top: auto;
+}
+
+.live-score {
+    margin-bottom: 40px;
+    border: 2px solid var(--color-surface);
+    background: #10110d;
+}
+
+.live-score-header {
+    padding: 12px;
+    font-family: var(--font-display);
+    font-size: 8px;
+    border-bottom: 1px solid var(--color-brand);
+}
+
+.live-score-content {
+    padding: 20px 10px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.live-score-footer {
+    padding: 12px;
+    background: var(--color-brand);
+    font-size: 12px;
+}
+
+/* Identificação da temporada */
+
+.sidebar-season {
+    font-family: var(--font-display);
+    font-size: 8px;
+    line-height: 1.8;
+}
+
+/* Área principal das páginas */
+
+.app-content {
+    min-width: 0;
+    padding: 32px 40px;
+}
+
+/* Layout responsivo */
+
+@media (max-width: 768px) {
+
+    .app-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        position: static;
+        height: auto;
+        padding: 20px;
+    }
+
+    .sidebar-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        margin-top: 16px;
+    }
+
+    .sidebar-link {
+        width: auto;
+    }
+
+    .sidebar-bottom {
+        display: none;
+    }
+
+    .app-content {
+        padding: 24px 16px;
+    }
+}
